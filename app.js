@@ -1,4 +1,4 @@
-const STORAGE_KEY = "tabarec_budget_app_v8";
+const STORAGE_KEY = "tabarec_budget_app_v9";
 const SECCIONES_OPERATIVAS = [
   "Conexion acometida principal",
   "Cuarto tecnico",
@@ -137,40 +137,41 @@ function estimatePriceInternet(desc, unidad) {
   const text = (desc || "").toLowerCase();
   const u = (unidad || "").toLowerCase();
   const rules = [
-    { k: ["módulo", "modulo", "longi", "650"], v: 415000 },
-    { k: ["sun2000-8k"], v: 2900000 },
-    { k: ["sun2000-10k"], v: 3213000 },
-    { k: ["inversor"], v: 3100000 },
-    { k: ["cable solar", "pv1"], v: 6400 },
-    { k: ["awg 2"], v: 29000 },
-    { k: ["awg 6"], v: 12000 },
-    { k: ["awg 8"], v: 6500 },
-    { k: ["mc4"], v: 12500 },
-    { k: ["dps"], v: 88000 },
-    { k: ["tablero"], v: 280000 },
-    { k: ["interruptor"], v: 125000 },
-    { k: ["tubería emt 1", "tuberia emt 1"], v: 9600 },
-    { k: ["tubería imc", "tuberia imc"], v: 26000 },
-    { k: ["accesorios emt"], v: 360000 },
-    { k: ["accesorios imc"], v: 320000 },
-    { k: ["bandeja portacables"], v: 105000 },
-    { k: ["caja de paso"], v: 92000 },
-    { k: ["riel estructural"], v: 62000 },
-    { k: ["l-hanger"], v: 4200 },
-    { k: ["eclamp"], v: 2900 },
-    { k: ["mclamp"], v: 2900 },
-    { k: ["ground clamp"], v: 3200 },
-    { k: ["marquilla", "rotulado"], v: 120000 },
-    { k: ["cinta aislante", "terminales"], v: 140000 },
-    { k: ["señalización", "senalizacion"], v: 95000 },
-    { k: ["fusible"], v: 52000 },
+    { any: ["sun2000-8k"], v: 2900000 },
+    { any: ["sun2000-10k"], v: 3213000 },
+    { any: ["mclamp"], v: 2800 },
+    { any: ["eclamp"], v: 2800 },
+    { any: ["ground clamp"], v: 3000 },
+    { any: ["l-hanger"], v: 3900 },
+    { any: ["riel estructural"], v: 42000 },
+    { all: ["longi", "650"], v: 415000 },
+    { any: ["cable solar", "pv1"], v: 6200 },
+    { any: ["awg 2"], v: 26000 },
+    { any: ["awg 6"], v: 10000 },
+    { any: ["awg 8"], v: 5200 },
+    { any: ["mc4"], v: 11500 },
+    { any: ["dps"], v: 78000 },
+    { any: ["tablero"], v: 220000 },
+    { any: ["interruptor"], v: 98000 },
+    { any: ["tubería emt 1", "tuberia emt 1"], v: 9200 },
+    { any: ["tubería imc", "tuberia imc"], v: 22000 },
+    { any: ["accesorios emt"], v: 260000 },
+    { any: ["accesorios imc"], v: 240000 },
+    { any: ["bandeja portacables"], v: 98000 },
+    { any: ["caja de paso"], v: 84000 },
+    { any: ["marquilla", "rotulado"], v: 90000 },
+    { any: ["cinta aislante", "terminales"], v: 115000 },
+    { any: ["señalización", "senalizacion"], v: 78000 },
+    { any: ["fusible"], v: 48000 },
+    { any: ["inversor"], v: 2600000 },
   ];
   for (const r of rules) {
-    if (r.k.some((k) => text.includes(k))) return r.v;
+    if (r.all && r.all.every((k) => text.includes(k))) return r.v;
+    if (r.any && r.any.some((k) => text.includes(k))) return r.v;
   }
-  if (u === "ml") return 7600;
-  if (u === "global") return 260000;
-  return 70000;
+  if (u === "ml") return 5800;
+  if (u === "global") return 190000;
+  return 30000;
 }
 
 function applyPdfOverrides(item) {
@@ -358,16 +359,16 @@ function renderItemsTable() {
           <div class="item-title">${escapeHtml(item.descripcion)}</div>
           <div class="item-sub">${escapeHtml(item.unidad)}${item.notas ? ` • ${escapeHtml(item.notas)}` : ""}</div>
         </td>
-        <td data-label="Seccion operativa">${escapeHtml(item.seccionOperativa)}</td>
-        <td data-label="Cant. proyectada">${toNumber(item.cantidadProyectada).toFixed(2)}</td>
-        <td data-label="Precio proyectado">${formatCurrency(item.precioPromedioInternet)}</td>
-        <td data-label="Cant. real">${toNumber(item.cantidadComprada).toFixed(2)}</td>
-        <td data-label="Precio real">${formatCurrency(item.precioReal)}</td>
+        <td data-label="Sec.">${escapeHtml(item.seccionOperativa)}</td>
+        <td data-label="C.P.">${toNumber(item.cantidadProyectada).toFixed(2)}</td>
+        <td data-label="P.P.">${formatCurrency(item.precioPromedioInternet)}</td>
+        <td data-label="C.R.">${toNumber(item.cantidadComprada).toFixed(2)}</td>
+        <td data-label="P.R.">${formatCurrency(item.precioReal)}</td>
         <td data-label="Estado">${statusChip(st)}</td>
-        <td data-label="Costo faltante">${formatCurrency(Math.max(0, getDifference(item)) * toNumber(item.precioPromedioInternet))}</td>
+        <td data-label="C.F.">${formatCurrency(Math.max(0, getDifference(item)) * toNumber(item.precioPromedioInternet))}</td>
         <td data-label="Acciones">
-          <button type="button" class="ghost" data-detail-id="${item.id}">Ver detalle</button>
-          <button type="button" class="danger ghost" data-delete-id="${item.id}">Eliminar</button>
+          <button type="button" class="ghost icon-btn" data-detail-id="${item.id}" title="Ver detalle">🔎 <span>Ver</span></button>
+          <button type="button" class="danger ghost icon-btn" data-delete-id="${item.id}" title="Eliminar">🗑 <span>Del</span></button>
         </td>
       </tr>`;
     })
@@ -390,15 +391,15 @@ function renderInvoicesTable() {
         <td data-label="Fecha">${escapeHtml(inv.date)}</td>
         <td data-label="Factura">${escapeHtml(inv.number)}</td>
         <td data-label="Proveedor">${escapeHtml(inv.supplier)}</td>
-        <td data-label="Donde se compro">${escapeHtml(inv.location || "-")}</td>
+        <td data-label="Lugar">${escapeHtml(inv.location || "-")}</td>
         <td data-label="Proyecto">${badge(inv.project)}</td>
         <td data-label="Item"><small>${escapeHtml(inv.itemDescription || "")}</small></td>
-        <td data-label="Cantidad">${toNumber(inv.qty).toFixed(2)}</td>
-        <td data-label="Precio unitario">${formatCurrency(inv.unitPrice)}</td>
+        <td data-label="Cant.">${toNumber(inv.qty).toFixed(2)}</td>
+        <td data-label="P.U.">${formatCurrency(inv.unitPrice)}</td>
         <td data-label="Total">${formatCurrency(inv.total)}</td>
         <td data-label="Acciones">
-          <button type="button" class="ghost" data-edit-invoice-id="${inv.id}">Editar</button>
-          <button type="button" class="danger ghost" data-delete-invoice-id="${inv.id}">Eliminar</button>
+          <button type="button" class="ghost icon-btn" data-edit-invoice-id="${inv.id}" title="Editar">✏️ <span>Editar</span></button>
+          <button type="button" class="danger ghost icon-btn" data-delete-invoice-id="${inv.id}" title="Eliminar">🗑 <span>Del</span></button>
         </td>
       </tr>`)
     .join("");
