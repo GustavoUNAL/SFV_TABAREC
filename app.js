@@ -1,4 +1,4 @@
-const STORAGE_KEY = "tabarec_budget_app_v7";
+const STORAGE_KEY = "tabarec_budget_app_v8";
 const SECCIONES_OPERATIVAS = [
   "Conexion acometida principal",
   "Cuarto tecnico",
