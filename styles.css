@@ -344,6 +344,10 @@ tbody tr:nth-child(even) {
   font-weight: 700;
 }
 
+.status-chip .short {
+  display: none;
+}
+
 .status-chip.pendiente {
   background: #fff3e0;
   color: #9a4b00;
@@ -466,6 +470,16 @@ textarea {
   .item-title {
     font-size: 12px;
   }
+
+  .items-table th,
+  .items-table td {
+    padding: 5px 6px;
+  }
+
+  .status-chip {
+    padding: 2px 6px;
+    font-size: 10px;
+  }
 }
 
 @media (max-width: 760px) {
@@ -528,20 +542,39 @@ textarea {
     content: "Item";
   }
 
-  .items-table td[data-label="Acciones"] {
+  .items-table td[data-label="Acciones"],
+  .items-table td[data-label="Acc."] {
     grid-template-columns: repeat(2, minmax(0, auto));
     justify-content: start;
     gap: 6px;
     margin-top: 4px;
   }
 
-  .items-table td[data-label="Acciones"] button {
+  .items-table td[data-label="Acciones"] button,
+  .items-table td[data-label="Acc."] button {
     width: auto;
     min-height: 28px;
   }
 
   .icon-btn span {
-    font-size: 10px;
+    display: none;
+  }
+
+  .icon-btn {
+    min-width: 28px;
+    width: 28px !important;
+    height: 28px;
+    padding: 0 !important;
+    gap: 0;
+    font-size: 13px;
+  }
+
+  .status-chip .full {
+    display: none;
+  }
+
+  .status-chip .short {
+    display: inline;
   }
 
   .kpis {

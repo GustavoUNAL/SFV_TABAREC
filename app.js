@@ -238,8 +238,13 @@ function getStatus(item) {
 }
 
 function statusChip(status) {
-  const labels = { PENDIENTE: "Falta comprar", COMPLETO: "Comprado", EXCESO: "Sobrecomprado" };
-  return `<span class="status-chip ${status.toLowerCase()}">${labels[status]}</span>`;
+  const labels = {
+    PENDIENTE: { full: "Falta comprar", short: "F.C." },
+    COMPLETO: { full: "Comprado", short: "OK" },
+    EXCESO: { full: "Sobrecomprado", short: "EX" },
+  };
+  const current = labels[status] || { full: status, short: status };
+  return `<span class="status-chip ${status.toLowerCase()}"><span class="full">${current.full}</span><span class="short">${current.short}</span></span>`;
 }
 
 function getTotals(item) {
@@ -364,9 +369,9 @@ function renderItemsTable() {
         <td data-label="P.P.">${formatCurrency(item.precioPromedioInternet)}</td>
         <td data-label="C.R.">${toNumber(item.cantidadComprada).toFixed(2)}</td>
         <td data-label="P.R.">${formatCurrency(item.precioReal)}</td>
-        <td data-label="Estado">${statusChip(st)}</td>
+        <td data-label="Est.">${statusChip(st)}</td>
         <td data-label="C.F.">${formatCurrency(Math.max(0, getDifference(item)) * toNumber(item.precioPromedioInternet))}</td>
-        <td data-label="Acciones">
+        <td data-label="Acc.">
           <button type="button" class="ghost icon-btn" data-detail-id="${item.id}" title="Ver detalle">🔎 <span>Ver</span></button>
           <button type="button" class="danger ghost icon-btn" data-delete-id="${item.id}" title="Eliminar">🗑 <span>Del</span></button>
         </td>
