@@ -99,6 +99,10 @@ body {
   font-size: 12px;
 }
 
+.mobile-abbr-note {
+  display: none;
+}
+
 label {
   font-size: 12px;
   color: var(--muted);
@@ -587,6 +591,10 @@ textarea {
 
   .topbar h1 {
     font-size: 20px;
+  }
+
+  .mobile-abbr-note {
+    display: inline;
   }
 
   .section-title {
