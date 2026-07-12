@@ -337,7 +337,7 @@ function renderKpis() {
 
 function renderAiuTable() {
   el.aiuBody.innerHTML = state.aiu
-    .map((row) => `<tr><td>${escapeHtml(row.name)}</td><td><input class="inline-input" type="number" step="0.1" min="0" data-aiu-name="${escapeHtml(row.name)}" value="${toNumber(row.porcentaje)}"></td></tr>`)
+    .map((row) => `<tr><td data-label="Concepto AIU">${escapeHtml(row.name)}</td><td data-label="% sobre materiales"><input class="inline-input" type="number" step="0.1" min="0" data-aiu-name="${escapeHtml(row.name)}" value="${toNumber(row.porcentaje)}"></td></tr>`)
     .join("");
 }
 
@@ -387,16 +387,16 @@ function renderInvoicesTable() {
     .sort((a, b) => (a.date < b.date ? 1 : -1))
     .map((inv) => `
       <tr>
-        <td>${escapeHtml(inv.date)}</td>
-        <td>${escapeHtml(inv.number)}</td>
-        <td>${escapeHtml(inv.supplier)}</td>
-        <td>${escapeHtml(inv.location || "-")}</td>
-        <td>${badge(inv.project)}</td>
-        <td><small>${escapeHtml(inv.itemDescription || "")}</small></td>
-        <td>${toNumber(inv.qty).toFixed(2)}</td>
-        <td>${formatCurrency(inv.unitPrice)}</td>
-        <td>${formatCurrency(inv.total)}</td>
-        <td>
+        <td data-label="Fecha">${escapeHtml(inv.date)}</td>
+        <td data-label="Factura">${escapeHtml(inv.number)}</td>
+        <td data-label="Proveedor">${escapeHtml(inv.supplier)}</td>
+        <td data-label="Donde se compro">${escapeHtml(inv.location || "-")}</td>
+        <td data-label="Proyecto">${badge(inv.project)}</td>
+        <td data-label="Item"><small>${escapeHtml(inv.itemDescription || "")}</small></td>
+        <td data-label="Cantidad">${toNumber(inv.qty).toFixed(2)}</td>
+        <td data-label="Precio unitario">${formatCurrency(inv.unitPrice)}</td>
+        <td data-label="Total">${formatCurrency(inv.total)}</td>
+        <td data-label="Acciones">
           <button type="button" class="ghost" data-edit-invoice-id="${inv.id}">Editar</button>
           <button type="button" class="danger ghost" data-delete-invoice-id="${inv.id}">Eliminar</button>
         </td>
@@ -412,11 +412,11 @@ function renderPendingTable() {
     .slice(0, 10)
     .map(({ item, faltante, costo }) => `
       <tr>
-        <td>${badge(item.project)}</td>
-        <td>${escapeHtml(item.descripcion).slice(0, 35)}...</td>
-        <td><small>${escapeHtml(item.descripcion)}</small></td>
-        <td>${faltante.toFixed(2)} ${escapeHtml(item.unidad)}</td>
-        <td>${formatCurrency(costo)}</td>
+        <td data-label="Proyecto">${badge(item.project)}</td>
+        <td data-label="Item">${escapeHtml(item.descripcion)}</td>
+        <td data-label="Descripcion"><small>${escapeHtml(item.descripcion)}</small></td>
+        <td data-label="Faltante">${faltante.toFixed(2)} ${escapeHtml(item.unidad)}</td>
+        <td data-label="Costo faltante">${formatCurrency(costo)}</td>
       </tr>`)
     .join("");
 }

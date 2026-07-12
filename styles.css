@@ -543,4 +543,74 @@ textarea {
     flex-direction: column;
     align-items: flex-start;
   }
+
+  .invoices-table,
+  .pending-table,
+  .aiu-table {
+    min-width: 0;
+    border-collapse: separate;
+    border-spacing: 0 10px;
+  }
+
+  .invoices-table thead,
+  .pending-table thead,
+  .aiu-table thead {
+    display: none;
+  }
+
+  .invoices-table tbody tr,
+  .pending-table tbody tr,
+  .aiu-table tbody tr {
+    display: grid;
+    gap: 6px;
+    background: #fff;
+    border: 1px solid #dce4f0;
+    border-radius: 10px;
+    padding: 10px;
+    box-shadow: 0 2px 8px rgba(16, 24, 40, 0.05);
+  }
+
+  .invoices-table td,
+  .pending-table td,
+  .aiu-table td {
+    width: 100% !important;
+    border-bottom: 0;
+    display: grid;
+    grid-template-columns: minmax(122px, 40%) 1fr;
+    gap: 8px;
+    padding: 0;
+    font-size: 12px;
+    align-items: start;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .invoices-table td::before,
+  .pending-table td::before,
+  .aiu-table td::before {
+    content: attr(data-label);
+    color: #667085;
+    font-weight: 700;
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
+  .invoices-table td[data-label="Item"],
+  .pending-table td[data-label="Item"],
+  .pending-table td[data-label="Descripcion"],
+  .aiu-table td[data-label="Concepto AIU"] {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .invoices-table td[data-label="Acciones"] {
+    grid-template-columns: 1fr;
+    gap: 7px;
+    margin-top: 4px;
+  }
+
+  .invoices-table td[data-label="Acciones"] button {
+    width: 100%;
+    min-height: 34px;
+  }
 }
