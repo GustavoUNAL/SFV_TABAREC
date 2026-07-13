@@ -10,7 +10,6 @@
   <header class="topbar">
     <div>
       <h1>Control Presupuestal TABAREC Pro</h1>
-      <p>Operacion de compras para 8kW y 20kW con analitica separada.</p>
     </div>
   </header>
 
@@ -43,21 +42,31 @@
             <option value="EXCESO">Sobrecomprado</option>
           </select>
         </label>
-        <label>Seccion operativa
-          <select id="sectionFilter">
-            <option value="ALL">Todas</option>
-            <option value="Conexion acometida principal">Conexion acometida principal</option>
-            <option value="Cuarto tecnico">Cuarto tecnico</option>
-            <option value="Techo solar">Techo solar</option>
-          </select>
-        </label>
+        <div class="filter-field">
+          <span class="filter-label">Seccion operativa (multi)</span>
+          <div id="sectionFilter" class="checkbox-group" title="Puedes marcar una o varias">
+            <label class="check-option">
+              <input type="checkbox" value="Conexion acometida principal" checked>
+              <span>Acometida</span>
+            </label>
+            <label class="check-option">
+              <input type="checkbox" value="Cuarto tecnico" checked>
+              <span>Cuarto tecnico</span>
+            </label>
+            <label class="check-option">
+              <input type="checkbox" value="Techo solar" checked>
+              <span>Techo solar</span>
+            </label>
+          </div>
+        </div>
       </div>
     </section>
 
     <section class="card">
       <div class="section-title">
-        <h2>Resumen rapido de compras</h2>
+        <h2>Resumen segun filtro</h2>
       </div>
+      <p class="table-help">La suma cambia al filtrar por proyecto y por una o varias secciones (ej. Techo solar + Acometida).</p>
       <div id="budgetSummary" class="kpis"></div>
     </section>
 
@@ -66,9 +75,11 @@
         <h2>Items del presupuesto</h2>
         <button id="addItemBtn" type="button">+ Agregar item</button>
       </div>
+      <p id="itemsFilterMeta" class="table-help"></p>
       <p class="table-help">
         Secciones operativas: <strong>Conexion acometida principal</strong>,
         <strong>Cuarto tecnico</strong> y <strong>Techo solar</strong>.
+        Los cables AC (AWG #2, #6, #8, etc.) quedan en acometida; puedes cambiar la seccion desde la tabla o el detalle.
         <span class="mobile-abbr-note">Abreviaturas movil: <strong>C.P.</strong>, <strong>P.P.</strong>, <strong>C.R.</strong>, <strong>P.R.</strong>, <strong>Est.</strong>, <strong>C.F.</strong>.</span>
       </p>
       <div class="table-wrap">
@@ -218,6 +229,17 @@
     </section>
   </main>
 
+  <dialog id="confirmDialog" class="confirm-dialog">
+    <form method="dialog" class="confirm-dialog-body">
+      <h2 id="confirmDialogTitle">Confirmar eliminacion</h2>
+      <p id="confirmDialogMessage">Deseas eliminar este elemento?</p>
+      <div class="confirm-dialog-actions">
+        <button type="submit" value="cancel" class="ghost" id="confirmCancelBtn">Cancelar</button>
+        <button type="submit" value="confirm" class="danger" id="confirmOkBtn">Eliminar</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="itemDialog" class="item-dialog">
     <form id="itemDetailForm" method="dialog" class="item-detail-form">
       <div class="section-title">
@@ -281,6 +303,7 @@
   </dialog>
 
   <script src="seed-data.js"></script>
+  <script src="compras-import.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -6,7 +6,7 @@ const SECCIONES_OPERATIVAS = [
 ];
 const PROJECT_PDF_OVERRIDES = {
   "8kW": [
-    { keys: ["módulo", "modulo", "longi"], qty: 13, price: 415000 },
+    { keys: ["longi"], qty: 12, price: 415000 },
     { keys: ["sun2000-8k"], qty: 1, price: 2900000 },
     { keys: ["cable solar", "6 mm"], qty: 60, price: 6367 },
     { keys: ["mc4"], qty: 2, price: 12500 },
@@ -17,7 +17,7 @@ const PROJECT_PDF_OVERRIDES = {
     { keys: ["tablero", "ac"], qty: 1, price: 110000 },
   ],
   "20kW": [
-    { keys: ["módulo", "modulo", "longi"], qty: 38, price: 415000 },
+    { keys: ["longi"], qty: 39, price: 415000 },
     { keys: ["sun2000-10k"], qty: 2, price: 3213000 },
     { keys: ["cable solar", "6 mm"], qty: 144, price: 6367 },
     { keys: ["mc4"], qty: 4, price: 12000 },
@@ -41,6 +41,7 @@ const el = {
   searchInput: document.getElementById("searchInput"),
   statusFilter: document.getElementById("statusFilter"),
   sectionFilter: document.getElementById("sectionFilter"),
+  itemsFilterMeta: document.getElementById("itemsFilterMeta"),
   budgetSummary: document.getElementById("budgetSummary"),
   kpis: document.getElementById("kpis"),
   projectChart: document.getElementById("projectChart"),
@@ -67,6 +68,10 @@ const el = {
   invoiceQty: document.getElementById("invoiceQty"),
   invoiceUnitPrice: document.getElementById("invoiceUnitPrice"),
   itemDialog: document.getElementById("itemDialog"),
+  confirmDialog: document.getElementById("confirmDialog"),
+  confirmDialogTitle: document.getElementById("confirmDialogTitle"),
+  confirmDialogMessage: document.getElementById("confirmDialogMessage"),
+  confirmOkBtn: document.getElementById("confirmOkBtn"),
   closeItemDialogBtn: document.getElementById("closeItemDialogBtn"),
   saveItemDetailBtn: document.getElementById("saveItemDetailBtn"),
   detailItemId: document.getElementById("detailItemId"),
@@ -82,10 +87,90 @@ const el = {
   detailNotas: document.getElementById("detailNotas"),
 };
 
+function askConfirm({
+  title = "Confirmar eliminacion",
+  message = "Deseas eliminar este elemento?",
+  confirmLabel = "Eliminar",
+} = {}) {
+  return new Promise((resolve) => {
+    el.confirmDialogTitle.textContent = title;
+    el.confirmDialogMessage.textContent = message;
+    el.confirmOkBtn.textContent = confirmLabel;
+
+    const onClose = () => {
+      el.confirmDialog.removeEventListener("close", onClose);
+      resolve(el.confirmDialog.returnValue === "confirm");
+    };
+
+    el.confirmDialog.addEventListener("close", onClose);
+    el.confirmDialog.showModal();
+  });
+}
+
+function applyComprasImport(stateObj) {
+  if (typeof COMPRAS_IMPORT === "undefined") return stateObj;
+  if (stateObj._importedComprasVersion === COMPRAS_IMPORT.version) return stateObj;
+
+  const existingIds = new Set(stateObj.items.map((x) => x.id));
+  for (const raw of COMPRAS_IMPORT.newItems || []) {
+    if (existingIds.has(raw.id)) continue;
+    stateObj.items.push({
+      id: raw.id,
+      project: raw.project,
+      section: raw.section || "",
+      seccionOperativa: raw.seccionOperativa || inferSeccionOperativa(raw),
+      descripcion: raw.descripcion,
+      unidad: raw.unidad || "und",
+      cantidadProyectada: toNumber(raw.cantidadProyectada),
+      cantidadCompradaManual: 0,
+      cantidadComprada: 0,
+      precioPromedioInternet: toNumber(raw.precioPromedioInternet),
+      precioReal: 0,
+      notas: raw.notas || "",
+    });
+    existingIds.add(raw.id);
+  }
+
+  const invIds = new Set((stateObj.invoices || []).map((x) => x.id));
+  for (const inv of COMPRAS_IMPORT.invoices || []) {
+    if (invIds.has(inv.id)) continue;
+    const item = stateObj.items.find((x) => x.id === inv.itemId);
+    stateObj.invoices.push({
+      id: inv.id,
+      date: inv.date,
+      number: inv.number,
+      supplier: inv.supplier,
+      location: inv.location || "",
+      qty: toNumber(inv.qty),
+      unitPrice: toNumber(inv.unitPrice),
+      total: toNumber(inv.total ?? toNumber(inv.qty) * toNumber(inv.unitPrice)),
+      itemId: inv.itemId,
+      project: inv.project || item?.project || "",
+      itemDescription: inv.itemDescription || item?.descripcion || "",
+    });
+    invIds.add(inv.id);
+  }
+
+  // Precio real = ultimo precio unitario facturado por item
+  const lastPrice = {};
+  for (const inv of stateObj.invoices) {
+    lastPrice[inv.itemId] = toNumber(inv.unitPrice);
+  }
+  for (const item of stateObj.items) {
+    if (lastPrice[item.id] !== undefined) {
+      item.precioReal = lastPrice[item.id];
+    }
+  }
+
+  stateObj._importedComprasVersion = COMPRAS_IMPORT.version;
+  stateObj._comprasNotes = COMPRAS_IMPORT.notes || [];
+  return stateObj;
+}
+
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return getFreshDefaultState();
-  return normalizeState(JSON.parse(raw));
+  if (!raw) return applyComprasImport(getFreshDefaultState());
+  return applyComprasImport(normalizeState(JSON.parse(raw)));
 }
 
 function getFreshDefaultState() {
@@ -99,17 +184,33 @@ function getFreshDefaultState() {
       precioReal: 0,
     }),
   }));
-  return { items, aiu: structuredClone(SEED_DATA.aiu), invoices: [] };
+  return {
+    items,
+    aiu: structuredClone(SEED_DATA.aiu),
+    invoices: [],
+    _migratedAcCablesToAcometida: true,
+    _migratedModulos12_39: true,
+    _importedComprasVersion: null,
+  };
+}
+
+function isSolarModule(item) {
+  const text = (item.descripcion || "").toLowerCase();
+  return text.includes("longi") || ((text.includes("módulo") || text.includes("modulo")) && text.includes("fotovoltaico"));
 }
 
 function normalizeState(raw) {
   const base = getFreshDefaultState();
   const items = Array.isArray(raw.items) ? raw.items : base.items;
+  const alreadyMigratedAc = raw._migratedAcCablesToAcometida === true;
+  const alreadyMigratedModulos = raw._migratedModulos12_39 === true;
   return {
-    items: items.map((item) => ({
-      ...applyPdfOverrides({
+    items: items.map((item) => {
+      // No reaplicar PDF overrides: preserva cantidades/precios editados por el usuario.
+      const normalized = {
         ...item,
         seccionOperativa: item.seccionOperativa || inferSeccionOperativa(item),
+        cantidadProyectada: toNumber(item.cantidadProyectada),
         cantidadCompradaManual: toNumber(item.cantidadCompradaManual ?? 0),
         cantidadComprada: 0,
         precioPromedioInternet:
@@ -117,20 +218,70 @@ function normalizeState(raw) {
             ? toNumber(item.precioPromedioInternet)
             : estimatePriceInternet(item.descripcion, item.unidad),
         precioReal: toNumber(item.precioReal || 0),
-      }),
-    })),
+      };
+      if (!alreadyMigratedAc && isAcCable(normalized)) {
+        normalized.seccionOperativa = "Conexion acometida principal";
+      }
+      if (!alreadyMigratedModulos && isSolarModule(normalized)) {
+        if (normalized.project === "8kW") normalized.cantidadProyectada = 12;
+        if (normalized.project === "20kW") normalized.cantidadProyectada = 39;
+      }
+      return normalized;
+    }),
     aiu: Array.isArray(raw.aiu) ? raw.aiu : base.aiu,
     invoices: Array.isArray(raw.invoices)
       ? raw.invoices.map((inv) => ({ ...inv, location: inv.location || "" }))
       : [],
+    _migratedAcCablesToAcometida: true,
+    _migratedModulos12_39: true,
+    _importedComprasVersion: raw._importedComprasVersion || null,
+    _comprasNotes: raw._comprasNotes || [],
   };
 }
 
+function isAcCable(item) {
+  const section = (item.section || "").toLowerCase();
+  const desc = (item.descripcion || "").toLowerCase();
+  if (!section.includes("circuito ac")) return false;
+  return (
+    desc.includes("conductor") ||
+    desc.includes("cable") ||
+    desc.includes("awg") ||
+    desc.includes("thhn") ||
+    desc.includes("thwn") ||
+    desc.includes("hffrls") ||
+    /#\s*\d+/.test(desc)
+  );
+}
+
 function inferSeccionOperativa(item) {
-  const text = `${item.section || ""} ${item.descripcion || ""}`.toLowerCase();
-  if (text.includes("medidor") || text.includes("acometida") || text.includes("alimentador combinado") || text.includes("awg 2")) return "Conexion acometida principal";
-  if (text.includes("modulo") || text.includes("panel") || text.includes("riel") || text.includes("clamp") || text.includes("cubierta")) return "Techo solar";
+  const section = (item.section || "").toLowerCase();
+  const desc = (item.descripcion || "").toLowerCase();
+  const text = `${section} ${desc}`;
+  if (
+    text.includes("medidor") ||
+    text.includes("acometida") ||
+    text.includes("alimentador combinado") ||
+    isAcCable(item)
+  ) {
+    return "Conexion acometida principal";
+  }
+  if (text.includes("modulo") || text.includes("panel") || text.includes("riel") || text.includes("clamp") || text.includes("cubierta")) {
+    return "Techo solar";
+  }
   return "Cuarto tecnico";
+}
+
+function sectionSelectHtml(item) {
+  return `
+    <select class="inline-input section-select" data-section-id="${item.id}" title="Cambiar seccion">
+      ${SECCIONES_OPERATIVAS.map(
+        (sec) =>
+          `<option value="${escapeHtml(sec)}" ${
+            sec === item.seccionOperativa ? "selected" : ""
+          }>${escapeHtml(sec)}</option>`
+      ).join("")}
+    </select>`;
 }
 
 function estimatePriceInternet(desc, unidad) {
@@ -249,7 +400,8 @@ function statusChip(status) {
 
 function getTotals(item) {
   const estimado = toNumber(item.cantidadProyectada) * toNumber(item.precioPromedioInternet);
-  const real = toNumber(item.cantidadComprada) * toNumber(item.precioReal);
+  const unitReal = toNumber(item.precioReal) || toNumber(item.precioPromedioInternet);
+  const real = toNumber(item.cantidadComprada) * unitReal;
   return { estimado, real };
 }
 
@@ -257,15 +409,22 @@ function getAiuFactor() {
   return state.aiu.reduce((acc, row) => acc + toNumber(row.porcentaje), 0) / 100;
 }
 
+function getSelectedSections() {
+  if (!el.sectionFilter) return [];
+  return [...el.sectionFilter.querySelectorAll('input[type="checkbox"]:checked')].map((box) => box.value);
+}
+
 function getFilteredItems() {
   const project = el.projectFilter.value;
   const status = el.statusFilter.value;
-  const section = el.sectionFilter.value;
+  const sections = getSelectedSections();
   const search = el.searchInput.value.trim().toLowerCase();
+  // Sin secciones marcadas => tabla vacia (filtro activo).
+  // Con secciones marcadas => solo esas.
   return state.items.filter((item) => {
     if (project !== "ALL" && item.project !== project) return false;
     if (status !== "ALL" && getStatus(item) !== status) return false;
-    if (section !== "ALL" && item.seccionOperativa !== section) return false;
+    if (!sections.includes(item.seccionOperativa)) return false;
     if (!search) return true;
     const text = `${item.descripcion} ${item.seccionOperativa} ${item.unidad} ${item.notas || ""}`.toLowerCase();
     return text.includes(search);
@@ -301,29 +460,101 @@ function getProjectTotals(project) {
   for (const item of items) {
     const diff = getDifference(item);
     comprar += Math.max(0, diff) * toNumber(item.precioPromedioInternet);
-    comprado += toNumber(item.cantidadComprada) * toNumber(item.precioReal);
+    comprado += getTotals(item).real;
     if (diff > 0) faltantes += 1;
   }
   return { comprar, comprado, faltantes };
 }
 
+function sumParts(items) {
+  const empty = () => ({ estimado: 0, real: 0, pendiente: 0, items: 0 });
+  const bySection = Object.fromEntries(SECCIONES_OPERATIVAS.map((s) => [s, empty()]));
+  const byProject = { "8kW": empty(), "20kW": empty() };
+  const byProjectSection = {
+    "8kW": Object.fromEntries(SECCIONES_OPERATIVAS.map((s) => [s, empty()])),
+    "20kW": Object.fromEntries(SECCIONES_OPERATIVAS.map((s) => [s, empty()])),
+  };
+  const total = empty();
+
+  for (const item of items) {
+    const totals = getTotals(item);
+    const pendiente = Math.max(0, getDifference(item)) * toNumber(item.precioPromedioInternet);
+    const bump = (bucket) => {
+      bucket.estimado += totals.estimado;
+      bucket.real += totals.real;
+      bucket.pendiente += pendiente;
+      bucket.items += 1;
+    };
+    bump(total);
+    if (!bySection[item.seccionOperativa]) bySection[item.seccionOperativa] = empty();
+    bump(bySection[item.seccionOperativa]);
+    if (byProject[item.project]) bump(byProject[item.project]);
+    if (byProjectSection[item.project]) {
+      if (!byProjectSection[item.project][item.seccionOperativa]) {
+        byProjectSection[item.project][item.seccionOperativa] = empty();
+      }
+      bump(byProjectSection[item.project][item.seccionOperativa]);
+    }
+  }
+  return { total, bySection, byProject, byProjectSection };
+}
+
+function kpiPartCard(label, part, extraClass = "") {
+  return `
+    <article class="kpi kpi-part ${extraClass}">
+      <div class="label">${escapeHtml(label)}</div>
+      <div class="value">${formatCurrency(part.estimado)}</div>
+      <div class="kpi-sub">Real ${formatCurrency(part.real)} · Pend. ${formatCurrency(part.pendiente)}</div>
+    </article>`;
+}
+
 function renderBudgetSummary() {
-  const p8 = getProjectTotals("8kW");
-  const p20 = getProjectTotals("20kW");
-  const totalComprado = p8.comprado + p20.comprado;
-  const totalComprar = p8.comprar + p20.comprar;
-  const totalFaltantes = p8.faltantes + p20.faltantes;
-  const avance = totalComprado + totalComprar > 0 ? (totalComprado / (totalComprado + totalComprar)) * 100 : 0;
+  const filtered = getFilteredItems();
+  const { total, bySection, byProject, byProjectSection } = sumParts(filtered);
+  const projectFilter = el.projectFilter.value;
+  const projectLabel = projectFilter === "ALL" ? "Todo unificado" : projectFilter;
+  const sections = getSelectedSections();
+  const sectionLabel =
+    sections.length === 0 || sections.length === SECCIONES_OPERATIVAS.length
+      ? "Todas las secciones"
+      : sections.join(" + ");
+
+  const projectsToShow = projectFilter === "ALL" ? ["8kW", "20kW"] : [projectFilter];
+
+  const projectBlocks = projectsToShow
+    .filter((p) => (byProject[p]?.items || 0) > 0)
+    .map((p) => {
+      const part = byProject[p];
+      const sectionCards = SECCIONES_OPERATIVAS.filter(
+        (sec) => (byProjectSection[p]?.[sec]?.items || 0) > 0
+      )
+        .map((sec) => kpiPartCard(`${sec}`, byProjectSection[p][sec], "kpi-section"))
+        .join("");
+
+      return `
+        <div class="kpi-project-block">
+          ${kpiPartCard(`Proyecto ${p}`, part, "kpi-project")}
+          <div class="kpi-section-grid">${sectionCards}</div>
+        </div>`;
+    })
+    .join("");
+
+  // Totales por seccion (solo utiles en vista unificada)
+  const sectionTotals =
+    projectFilter === "ALL"
+      ? SECCIONES_OPERATIVAS.filter((sec) => (bySection[sec]?.items || 0) > 0)
+          .map((sec) => kpiPartCard(`${sec} (ambos proyectos)`, bySection[sec], "kpi-section-total"))
+          .join("")
+      : "";
 
   el.budgetSummary.innerHTML = `
-    <article class="kpi"><div class="label">Total por comprar 8kW</div><div class="value">${formatCurrency(p8.comprar)}</div></article>
-    <article class="kpi"><div class="label">Total por comprar 20kW</div><div class="value">${formatCurrency(p20.comprar)}</div></article>
-    <article class="kpi"><div class="label">Comprado proyecto 8kW</div><div class="value">${formatCurrency(p8.comprado)}</div></article>
-    <article class="kpi"><div class="label">Comprado proyecto 20kW</div><div class="value">${formatCurrency(p20.comprado)}</div></article>
-    <article class="kpi"><div class="label">Total compras general</div><div class="value">${formatCurrency(totalComprado)}</div></article>
-    <article class="kpi"><div class="label">Total pendiente general</div><div class="value">${formatCurrency(totalComprar)}</div></article>
-    <article class="kpi"><div class="label">Items faltantes</div><div class="value">${totalFaltantes}</div></article>
-    <article class="kpi"><div class="label">Avance compras</div><div class="value">${avance.toFixed(1)}%</div></article>
+    <article class="kpi kpi-highlight">
+      <div class="label">Suma filtrada · ${escapeHtml(projectLabel)}</div>
+      <div class="value">${formatCurrency(total.estimado)}</div>
+      <div class="kpi-sub">${escapeHtml(sectionLabel)} · ${total.items} items · Real ${formatCurrency(total.real)} · Pend. ${formatCurrency(total.pendiente)}</div>
+    </article>
+    ${projectBlocks}
+    ${sectionTotals ? `<div class="kpi-section-totals">${sectionTotals}</div>` : ""}
   `;
 }
 
@@ -348,7 +579,32 @@ function renderAiuTable() {
 }
 
 function renderItemsTable() {
-  el.itemsBody.innerHTML = getFilteredItems()
+  const filtered = getFilteredItems();
+  const project = el.projectFilter.value;
+  const sections = getSelectedSections();
+  const projectLabel = project === "ALL" ? "todos los proyectos" : project;
+  const sectionLabel =
+    sections.length === 0
+      ? "ninguna seccion"
+      : sections.length === SECCIONES_OPERATIVAS.length
+        ? "todas las secciones"
+        : sections.join(", ");
+
+  if (el.itemsFilterMeta) {
+    el.itemsFilterMeta.innerHTML = `Mostrando <strong>${filtered.length}</strong> de <strong>${state.items.length}</strong> items · ${escapeHtml(projectLabel)} · ${escapeHtml(sectionLabel)}`;
+  }
+
+  if (!filtered.length) {
+    el.itemsBody.innerHTML = `
+      <tr>
+        <td colspan="10" data-label="Sin resultados">
+          <div class="empty-filter">No hay items con este filtro. Marca al menos una seccion o cambia el proyecto.</div>
+        </td>
+      </tr>`;
+    return;
+  }
+
+  el.itemsBody.innerHTML = filtered
     .sort((a, b) => {
       if (a.project !== b.project) return a.project.localeCompare(b.project);
       if (a.seccionOperativa !== b.seccionOperativa) return a.seccionOperativa.localeCompare(b.seccionOperativa);
@@ -356,7 +612,6 @@ function renderItemsTable() {
     })
     .map((item) => {
       const st = getStatus(item);
-      const totals = getTotals(item);
       return `
       <tr>
         <td data-label="Proyecto">${badge(item.project)}</td>
@@ -364,7 +619,7 @@ function renderItemsTable() {
           <div class="item-title">${escapeHtml(item.descripcion)}</div>
           <div class="item-sub">${escapeHtml(item.unidad)}${item.notas ? ` • ${escapeHtml(item.notas)}` : ""}</div>
         </td>
-        <td data-label="Sec.">${escapeHtml(item.seccionOperativa)}</td>
+        <td data-label="Sec.">${sectionSelectHtml(item)}</td>
         <td data-label="C.P.">${toNumber(item.cantidadProyectada).toFixed(2)}</td>
         <td data-label="P.P.">${formatCurrency(item.precioPromedioInternet)}</td>
         <td data-label="C.R.">${toNumber(item.cantidadComprada).toFixed(2)}</td>
@@ -639,9 +894,17 @@ function setupEvents() {
   el.tabBudget.addEventListener("click", () => setTab("budget"));
   el.tabAnalytics.addEventListener("click", () => setTab("analytics"));
 
-  for (const c of [el.projectFilter, el.searchInput, el.statusFilter, el.sectionFilter]) {
+  for (const c of [el.projectFilter, el.searchInput, el.statusFilter]) {
     c.addEventListener("input", rerender);
+    c.addEventListener("change", rerender);
   }
+  el.sectionFilter.addEventListener("change", rerender);
+  el.sectionFilter.addEventListener("click", (event) => {
+    if (event.target.matches('input[type="checkbox"]')) {
+      // Asegura que la tabla se actualice junto con el resumen.
+      queueMicrotask(rerender);
+    }
+  });
 
   el.aiuBody.addEventListener("change", (event) => {
     const input = event.target.closest("[data-aiu-name]");
@@ -652,12 +915,28 @@ function setupEvents() {
     rerender();
   });
 
-  el.itemsBody.addEventListener("click", (event) => {
+  el.itemsBody.addEventListener("change", (event) => {
+    const sectionSelect = event.target.closest("[data-section-id]");
+    if (!sectionSelect) return;
+    const item = state.items.find((x) => x.id === sectionSelect.getAttribute("data-section-id"));
+    if (!item) return;
+    const next = sectionSelect.value;
+    if (!SECCIONES_OPERATIVAS.includes(next)) return;
+    item.seccionOperativa = next;
+    rerender();
+  });
+
+  el.itemsBody.addEventListener("click", async (event) => {
     const detail = event.target.closest("[data-detail-id]");
     if (detail) { openItemDialog(detail.getAttribute("data-detail-id")); return; }
     const del = event.target.closest("[data-delete-id]");
     if (!del) return;
-    if (!window.confirm("Deseas eliminar este item?")) return;
+    const ok = await askConfirm({
+      title: "Eliminar item",
+      message: "Deseas eliminar este item? Tambien se eliminaran las facturas asociadas.",
+      confirmLabel: "Eliminar",
+    });
+    if (!ok) return;
     const id = del.getAttribute("data-delete-id");
     state.items = state.items.filter((x) => x.id !== id);
     state.invoices = state.invoices.filter((x) => x.itemId !== id);
@@ -699,7 +978,7 @@ function setupEvents() {
     rerender();
   });
 
-  el.invoicesBody.addEventListener("click", (event) => {
+  el.invoicesBody.addEventListener("click", async (event) => {
     const edit = event.target.closest("[data-edit-invoice-id]");
     if (edit) {
       const inv = state.invoices.find((x) => x.id === edit.getAttribute("data-edit-invoice-id"));
@@ -719,13 +998,23 @@ function setupEvents() {
     }
     const del = event.target.closest("[data-delete-invoice-id]");
     if (!del) return;
-    if (!window.confirm("Deseas eliminar esta factura?")) return;
+    const ok = await askConfirm({
+      title: "Eliminar factura",
+      message: "Deseas eliminar esta factura?",
+      confirmLabel: "Eliminar",
+    });
+    if (!ok) return;
     state.invoices = state.invoices.filter((x) => x.id !== del.getAttribute("data-delete-invoice-id"));
     rerender();
   });
 
-  el.clearInvoicesBtn.addEventListener("click", () => {
-    if (!window.confirm("Esto borrara todas las facturas registradas. Continuar?")) return;
+  el.clearInvoicesBtn.addEventListener("click", async () => {
+    const ok = await askConfirm({
+      title: "Borrar facturas",
+      message: "Esto borrara todas las facturas registradas. Continuar?",
+      confirmLabel: "Borrar todas",
+    });
+    if (!ok) return;
     state.invoices = [];
     resetInvoiceForm();
     rerender();
@@ -753,12 +1042,19 @@ function setupEvents() {
     }
   });
 
-  el.resetDataBtn.addEventListener("click", () => {
-    if (!window.confirm("Se restauraran los datos iniciales. Continuar?")) return;
-    const defaults = getFreshDefaultState();
+  el.resetDataBtn.addEventListener("click", async () => {
+    const ok = await askConfirm({
+      title: "Reiniciar datos",
+      message: "Se restauraran los datos iniciales e importaran de nuevo las compras de las fotos. Continuar?",
+      confirmLabel: "Reiniciar",
+    });
+    if (!ok) return;
+    const defaults = applyComprasImport(getFreshDefaultState());
     state.items = defaults.items;
     state.aiu = defaults.aiu;
     state.invoices = defaults.invoices;
+    state._importedComprasVersion = defaults._importedComprasVersion;
+    state._comprasNotes = defaults._comprasNotes;
     resetInvoiceForm();
     rerender();
   });
