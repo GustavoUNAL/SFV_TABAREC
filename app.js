@@ -1,4 +1,5 @@
 const STORAGE_KEY = "tabarec_budget_app_v9";
+const UI_STORAGE_KEY = "tabarec_budget_ui_v1";
 const SECCIONES_OPERATIVAS = [
   "Conexion acometida principal",
   "Cuarto tecnico",
@@ -29,19 +30,57 @@ const PROJECT_PDF_OVERRIDES = {
   ],
 };
 
+// Debe declararse antes de loadState(): applyComprasImport usa estos links al migrar.
+const INVOICE_DRIVE_LINKS = {
+  defa: "https://drive.google.com/file/d/1C90C9ooS0IO-1IebiyksTo1PMYT5X53J/view",
+  casaDielectrica: "https://drive.google.com/file/d/1f9c-aZ18KPgx8eE6PR0wwxaWqKO6Sic5/view?usp=sharing",
+  solucionesElectricas: "https://drive.google.com/file/d/1WT0s-kQ8EYK_H_RtFzNnC1E_AmbrT8tn/view?usp=sharing",
+  devolucionConduleta: "https://drive.google.com/file/d/1jkqv28YnA8j8sZfMZSmMmeYtDFzyZwXq/view?usp=sharing",
+  solarHub: "https://drive.google.com/file/d/1qMfd8ECGO22618ysa6eICzEoWR2MQT2d/view?usp=sharing",
+};
+
 const state = loadState();
-const ui = { editingInvoiceId: null };
+const ui = {
+  editingInvoiceId: null,
+  activeTab: "home",
+  activeBudgetPanel: "projected",
+  ...loadUiState(),
+};
 
 const el = {
+  tabHome: document.getElementById("tabHome"),
   tabBudget: document.getElementById("tabBudget"),
   tabAnalytics: document.getElementById("tabAnalytics"),
+  viewHome: document.getElementById("viewHome"),
   viewBudget: document.getElementById("viewBudget"),
   viewAnalytics: document.getElementById("viewAnalytics"),
+  homeSummary8: document.getElementById("homeSummary8"),
+  homeSummary20: document.getElementById("homeSummary20"),
+  homeGlobalKpis: document.getElementById("homeGlobalKpis"),
+  homeAvance8: document.getElementById("homeAvance8"),
+  homeAvance20: document.getElementById("homeAvance20"),
+  homeBar8: document.getElementById("homeBar8"),
+  homeBar20: document.getElementById("homeBar20"),
+  homeSections8: document.getElementById("homeSections8"),
+  homeSections20: document.getElementById("homeSections20"),
+  homePending: document.getElementById("homePending"),
+  themeToggle: document.getElementById("themeToggle"),
+  themeSwitchLabel: document.getElementById("themeSwitchLabel"),
   projectFilter: document.getElementById("projectFilter"),
   searchInput: document.getElementById("searchInput"),
   statusFilter: document.getElementById("statusFilter"),
   sectionFilter: document.getElementById("sectionFilter"),
+  panelProjectedBtn: document.getElementById("panelProjectedBtn"),
+  panelPurchasesBtn: document.getElementById("panelPurchasesBtn"),
+  panelCrossBtn: document.getElementById("panelCrossBtn"),
+  panelInvoicesBtn: document.getElementById("panelInvoicesBtn"),
+  panelProjected: document.getElementById("panelProjected"),
+  panelPurchases: document.getElementById("panelPurchases"),
+  panelCross: document.getElementById("panelCross"),
+  panelInvoices: document.getElementById("panelInvoices"),
   itemsFilterMeta: document.getElementById("itemsFilterMeta"),
+  purchasesMeta: document.getElementById("purchasesMeta"),
+  consistencySummary: document.getElementById("consistencySummary"),
   budgetSummary: document.getElementById("budgetSummary"),
   kpis: document.getElementById("kpis"),
   projectChart: document.getElementById("projectChart"),
@@ -70,11 +109,18 @@ const el = {
   invoiceLocation: document.getElementById("invoiceLocation"),
   invoiceQty: document.getElementById("invoiceQty"),
   invoiceUnitPrice: document.getElementById("invoiceUnitPrice"),
+  invoiceFileLink: document.getElementById("invoiceFileLink"),
   itemDialog: document.getElementById("itemDialog"),
   confirmDialog: document.getElementById("confirmDialog"),
   confirmDialogTitle: document.getElementById("confirmDialogTitle"),
   confirmDialogMessage: document.getElementById("confirmDialogMessage"),
   confirmOkBtn: document.getElementById("confirmOkBtn"),
+  invoiceGroupDialog: document.getElementById("invoiceGroupDialog"),
+  closeInvoiceDetailBtn: document.getElementById("closeInvoiceDetailBtn"),
+  invoiceDetailTitle: document.getElementById("invoiceDetailTitle"),
+  invoiceDetailMeta: document.getElementById("invoiceDetailMeta"),
+  invoiceDetailLinks: document.getElementById("invoiceDetailLinks"),
+  invoiceDetailBody: document.getElementById("invoiceDetailBody"),
   closeItemDialogBtn: document.getElementById("closeItemDialogBtn"),
   saveItemDetailBtn: document.getElementById("saveItemDetailBtn"),
   detailItemId: document.getElementById("detailItemId"),
@@ -114,9 +160,25 @@ function applyComprasImport(stateObj) {
   if (typeof COMPRAS_IMPORT === "undefined") return stateObj;
   if (stateObj._importedComprasVersion === COMPRAS_IMPORT.version) return stateObj;
 
+  const retireItems = new Set(COMPRAS_IMPORT.retireItemIds || []);
+  const supersedeInvoices = new Set(COMPRAS_IMPORT.supersedeInvoiceIds || []);
+
+  stateObj.items = (stateObj.items || []).filter((item) => !retireItems.has(item.id));
+  stateObj.invoices = (stateObj.invoices || []).filter((inv) => !supersedeInvoices.has(inv.id));
+
   const existingIds = new Set(stateObj.items.map((x) => x.id));
   for (const raw of COMPRAS_IMPORT.newItems || []) {
-    if (existingIds.has(raw.id)) continue;
+    if (existingIds.has(raw.id)) {
+      const item = stateObj.items.find((x) => x.id === raw.id);
+      if (item) {
+        item.cantidadProyectada = toNumber(raw.cantidadProyectada);
+        item.precioPromedioInternet = toNumber(raw.precioPromedioInternet);
+        item.notas = raw.notas || item.notas || "";
+        item.seccionOperativa = raw.seccionOperativa || item.seccionOperativa;
+        item.descripcion = raw.descripcion || item.descripcion;
+      }
+      continue;
+    }
     stateObj.items.push({
       id: raw.id,
       project: raw.project,
@@ -144,6 +206,7 @@ function applyComprasImport(stateObj) {
       number: inv.number,
       supplier: inv.supplier,
       location: inv.location || "",
+      fileLink: normalizeInvoiceFileLink(inv.fileLink || inferInvoiceFileLink(inv)),
       qty: toNumber(inv.qty),
       unitPrice: toNumber(inv.unitPrice),
       total: toNumber(inv.total ?? toNumber(inv.qty) * toNumber(inv.unitPrice)),
@@ -154,15 +217,19 @@ function applyComprasImport(stateObj) {
     invIds.add(inv.id);
   }
 
-  // Precio real = ultimo precio unitario facturado por item
+  for (const inv of stateObj.invoices) {
+    const item = stateObj.items.find((x) => x.id === inv.itemId);
+    if (item && !inv.itemDescription) inv.itemDescription = item.descripcion;
+    // Fuerza links de Google Drive (reemplaza rutas locales antiguas).
+    inv.fileLink = normalizeInvoiceFileLink(inferInvoiceFileLink(inv) || inv.fileLink);
+  }
+
   const lastPrice = {};
   for (const inv of stateObj.invoices) {
     lastPrice[inv.itemId] = toNumber(inv.unitPrice);
   }
   for (const item of stateObj.items) {
-    if (lastPrice[item.id] !== undefined) {
-      item.precioReal = lastPrice[item.id];
-    }
+    if (lastPrice[item.id] !== undefined) item.precioReal = lastPrice[item.id];
   }
 
   stateObj._importedComprasVersion = COMPRAS_IMPORT.version;
@@ -233,7 +300,11 @@ function normalizeState(raw) {
     }),
     aiu: Array.isArray(raw.aiu) ? raw.aiu : base.aiu,
     invoices: Array.isArray(raw.invoices)
-      ? raw.invoices.map((inv) => ({ ...inv, location: inv.location || "" }))
+      ? raw.invoices.map((inv) => ({
+        ...inv,
+        location: inv.location || "",
+        fileLink: normalizeInvoiceFileLink(inv.fileLink || inferInvoiceFileLink(inv)),
+      }))
       : [],
     _migratedAcCablesToAcometida: true,
     _migratedModulos12_39: true,
@@ -344,6 +415,26 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+function loadUiState() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(UI_STORAGE_KEY) || "{}");
+    const tabs = ["home", "budget", "analytics"];
+    const panels = ["projected", "purchases", "cross", "invoices"];
+    const activeTab = tabs.includes(raw.activeTab) ? raw.activeTab : "home";
+    const activeBudgetPanel = panels.includes(raw.activeBudgetPanel) ? raw.activeBudgetPanel : "projected";
+    return { activeTab, activeBudgetPanel };
+  } catch (_error) {
+    return { activeTab: "home", activeBudgetPanel: "projected" };
+  }
+}
+
+function saveUiState() {
+  localStorage.setItem(UI_STORAGE_KEY, JSON.stringify({
+    activeTab: ui.activeTab,
+    activeBudgetPanel: ui.activeBudgetPanel,
+  }));
+}
+
 function toNumber(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
@@ -364,6 +455,78 @@ function escapeHtml(v) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function inferInvoiceFileLink(inv) {
+  const supplier = (inv?.supplier || "").trim().toLowerCase();
+  const number = (inv?.number || "").trim().toLowerCase();
+  const desc = `${inv?.itemDescription || ""} ${inv?.itemId || ""}`.toLowerCase();
+  if (
+    number.includes("paea15807") ||
+    number.includes("15807") ||
+    desc.includes("ajuste") && desc.includes("conduleta") ||
+    desc.includes("devolucion") && desc.includes("conduleta")
+  ) {
+    return INVOICE_DRIVE_LINKS.devolucionConduleta;
+  }
+  if (supplier.includes("grupo defa") || number.includes("paea15795")) {
+    return INVOICE_DRIVE_LINKS.defa;
+  }
+  if (supplier.includes("soluciones electricas") || number.includes("n3598")) {
+    return INVOICE_DRIVE_LINKS.solucionesElectricas;
+  }
+  if (supplier.includes("casa dielectrica") || number.includes("fea5-32889")) {
+    return INVOICE_DRIVE_LINKS.casaDielectrica;
+  }
+  if (
+    supplier.includes("solar hub") ||
+    number.includes("ctshcar260235") ||
+    number.includes("credibanco")
+  ) {
+    return INVOICE_DRIVE_LINKS.solarHub;
+  }
+  return "";
+}
+
+function normalizeInvoiceFileLink(link) {
+  if (!link) return "";
+  const value = String(link).trim();
+  if (!value) return "";
+  const lower = value.toLowerCase();
+  if (lower.startsWith("javascript:") || lower.startsWith("data:")) return "";
+  // Rutas locales antiguas -> Drive
+  if (lower.includes("devoluci") && lower.includes("conduleta")) return INVOICE_DRIVE_LINKS.devolucionConduleta;
+  if (lower.includes("defa")) return INVOICE_DRIVE_LINKS.defa;
+  if (lower.includes("solucione") || lower.includes("soluciones")) return INVOICE_DRIVE_LINKS.solucionesElectricas;
+  if (lower.includes("casa dielectrica") || lower.includes("dielectrica")) return INVOICE_DRIVE_LINKS.casaDielectrica;
+  if (lower.includes("ctshcar") || lower.includes("solar hub") || lower.includes("tabares")) {
+    return INVOICE_DRIVE_LINKS.solarHub;
+  }
+  return value;
+}
+
+function getInvoiceFileHref(link) {
+  const normalized = normalizeInvoiceFileLink(link);
+  if (!normalized) return "";
+  if (/^(https?:\/\/|file:\/\/)/i.test(normalized)) return normalized;
+  if (normalized.startsWith("/") || normalized.startsWith("./") || normalized.startsWith("../")) {
+    return encodeURI(normalized);
+  }
+  return encodeURI(normalized);
+}
+
+function getFileLabel(link) {
+  const href = getInvoiceFileHref(link);
+  if (!href) return "";
+  if (href.includes("1C90C9ooS0IO-1IebiyksTo1PMYT5X53J")) return "DEFA.pdf (Google Drive)";
+  if (href.includes("1f9c-aZ18KPgx8eE6PR0wwxaWqKO6Sic5")) return "Casa dielectrica.pdf (Google Drive)";
+  if (href.includes("1WT0s-kQ8EYK_H_RtFzNnC1E_AmbrT8tn")) return "Soluciones electricas.pdf (Google Drive)";
+  if (href.includes("1jkqv28YnA8j8sZfMZSmMmeYtDFzyZwXq")) return "Devolucion conduleta.pdf (Google Drive)";
+  if (href.includes("1qMfd8ECGO22618ysa6eICzEoWR2MQT2d")) return "Solar Hub CTSHCAR260235.pdf (Google Drive)";
+  if (/drive\.google\.com/i.test(href)) return "Abrir en Google Drive";
+  const clean = href.split("?")[0].split("#")[0];
+  const parts = clean.split("/");
+  return decodeURIComponent(parts[parts.length - 1] || href);
 }
 
 function badge(project) {
@@ -511,9 +674,62 @@ function kpiPartCard(label, part, extraClass = "") {
     </article>`;
 }
 
+function getDataConsistencyReport() {
+  const itemById = Object.fromEntries(state.items.map((item) => [item.id, item]));
+  let orphanInvoices = 0;
+  let projectMismatches = 0;
+  for (const inv of state.invoices) {
+    const item = itemById[inv.itemId];
+    if (!item) {
+      orphanInvoices += 1;
+      continue;
+    }
+    if (inv.project && inv.project !== item.project) {
+      projectMismatches += 1;
+    }
+  }
+
+  const bySupplierDay = {};
+  for (const inv of state.invoices) {
+    const supplier = (inv.supplier || "").trim().toLowerCase();
+    const date = inv.date || "";
+    if (!supplier || !date) continue;
+    const key = `${supplier}__${date}`;
+    if (!bySupplierDay[key]) bySupplierDay[key] = new Set();
+    bySupplierDay[key].add((inv.number || "").trim().toLowerCase() || "sin-numero");
+  }
+  // Solo cuenta repetida cuando hay mas de una compra distinta
+  // (mismo proveedor + fecha, pero con diferente numero de factura/comprobante).
+  const repeatedSupplierDay = Object.values(bySupplierDay).filter((set) => set.size > 1).length;
+
+  const duplicatedInvoiceNumber = (() => {
+    const map = {};
+    for (const inv of state.invoices) {
+      const n = (inv.number || "").trim().toLowerCase();
+      if (!n) continue;
+      map[n] = (map[n] || 0) + 1;
+    }
+    return Object.values(map).filter((n) => n > 1).length;
+  })();
+
+  const itemsWithoutSection = state.items.filter((item) => !SECCIONES_OPERATIVAS.includes(item.seccionOperativa)).length;
+  const invoicesWithoutLocation = state.invoices.filter((inv) => !(inv.location || "").trim()).length;
+
+  return {
+    totalItems: state.items.length,
+    totalInvoices: state.invoices.length,
+    orphanInvoices,
+    projectMismatches,
+    repeatedSupplierDay,
+    duplicatedInvoiceNumber,
+    itemsWithoutSection,
+    invoicesWithoutLocation,
+  };
+}
+
 function renderBudgetSummary() {
   const filtered = getFilteredItems();
-  const { total, bySection, byProject, byProjectSection } = sumParts(filtered);
+  const { total, byProject } = sumParts(filtered);
   const projectFilter = el.projectFilter.value;
   const projectLabel = projectFilter === "ALL" ? "Todo unificado" : projectFilter;
   const sections = getSelectedSections();
@@ -522,42 +738,184 @@ function renderBudgetSummary() {
       ? "Todas las secciones"
       : sections.join(" + ");
 
-  const projectsToShow = projectFilter === "ALL" ? ["8kW", "20kW"] : [projectFilter];
+  const p8 = byProject["8kW"] || { estimado: 0, real: 0, pendiente: 0, items: 0 };
+  const p20 = byProject["20kW"] || { estimado: 0, real: 0, pendiente: 0, items: 0 };
+  const purchasedOnly = filtered.filter((item) => toNumber(item.cantidadComprada) > 0);
+  const purchasedReal = purchasedOnly.reduce((acc, item) => acc + getTotals(item).real, 0);
+  const purchasedProjected = purchasedOnly.reduce(
+    (acc, item) => acc + toNumber(item.cantidadComprada) * toNumber(item.precioPromedioInternet),
+    0
+  );
+  const purchasedAvgPrice = purchasedOnly.length > 0 ? purchasedReal / Math.max(1, purchasedOnly.reduce((acc, i) => acc + toNumber(i.cantidadComprada), 0)) : 0;
+  const purchasedRate = total.items > 0 ? (purchasedOnly.length / total.items) * 100 : 0;
+  const avanceGeneral = total.estimado > 0 ? (total.real / total.estimado) * 100 : 0;
+  const comprados = filtered.filter((item) => getStatus(item) === "COMPLETO").length;
+  const faltantes = filtered.filter((item) => getStatus(item) === "PENDIENTE").length;
 
-  const projectBlocks = projectsToShow
-    .filter((p) => (byProject[p]?.items || 0) > 0)
-    .map((p) => {
-      const part = byProject[p];
-      const sectionCards = SECCIONES_OPERATIVAS.filter(
-        (sec) => (byProjectSection[p]?.[sec]?.items || 0) > 0
-      )
-        .map((sec) => kpiPartCard(`${sec}`, byProjectSection[p][sec], "kpi-section"))
-        .join("");
+  const crossStatus = (item) => {
+    const qtyDiff = getDifference(item);
+    const qtyReal = toNumber(item.cantidadComprada);
+    const priceProjected = toNumber(item.precioPromedioInternet);
+    const priceReal = toNumber(item.precioReal);
+    if (qtyReal <= 0) return "none";
+    if (Math.abs(qtyDiff) > 0.01) return "warn";
+    if (priceReal <= 0 || priceProjected <= 0) return "warn";
+    const variance = Math.abs(((priceReal - priceProjected) / priceProjected) * 100);
+    return variance > 20 ? "warn" : "ok";
+  };
+  const crossOk = filtered.filter((item) => crossStatus(item) === "ok").length;
+  const crossWarn = filtered.filter((item) => crossStatus(item) === "warn").length;
+  const crossNone = filtered.filter((item) => crossStatus(item) === "none").length;
+  const consistency = getDataConsistencyReport();
 
-      return `
-        <div class="kpi-project-block">
-          ${kpiPartCard(`Proyecto ${p}`, part, "kpi-project")}
-          <div class="kpi-section-grid">${sectionCards}</div>
-        </div>`;
-    })
-    .join("");
+  let cards = [];
+  if (ui.activeBudgetPanel === "purchases") {
+    const compraVariance = purchasedProjected > 0 ? ((purchasedReal - purchasedProjected) / purchasedProjected) * 100 : 0;
+    cards = [
+      ["Compra acumulada", formatCurrency(purchasedReal), `${escapeHtml(projectLabel)} · ${purchasedOnly.length} items`],
+      ["Ref. proyectada compra", formatCurrency(purchasedProjected), `${escapeHtml(sectionLabel)}`],
+      ["Diferencia compra", formatCurrency(purchasedReal - purchasedProjected), `${compraVariance.toFixed(1)}% vs proyectado`],
+      ["Cobertura compra", `${purchasedRate.toFixed(1)}%`, "Items comprados / filtrados"],
+      ["Compra 8kW", formatCurrency(purchasedOnly.filter((i) => i.project === "8kW").reduce((a, i) => a + getTotals(i).real, 0)), "Solo compras"],
+      ["Compra 20kW", formatCurrency(purchasedOnly.filter((i) => i.project === "20kW").reduce((a, i) => a + getTotals(i).real, 0)), "Solo compras"],
+      ["Items con compra", String(purchasedOnly.length), `De ${total.items} filtrados`],
+      ["Precio promedio real", formatCurrency(purchasedAvgPrice), "Unitario sobre cantidades compradas"],
+    ];
+  } else if (ui.activeBudgetPanel === "cross") {
+    const crossRate = total.items > 0 ? (crossOk / total.items) * 100 : 0;
+    cards = [
+      ["Cruces OK", String(crossOk), `${crossRate.toFixed(1)}% del filtro`],
+      ["Cruces por revisar", String(crossWarn), "Cantidad o precio"],
+      ["Sin compra", String(crossNone), "Aun no cruza"],
+      ["Pendiente estimado", formatCurrency(total.pendiente), `${escapeHtml(sectionLabel)}`],
+      ["Proyectado 8kW", formatCurrency(p8.estimado), "Base de cruce"],
+      ["Proyectado 20kW", formatCurrency(p20.estimado), "Base de cruce"],
+      ["Real total", formatCurrency(total.real), "Compras acumuladas"],
+      ["Avance real", `${avanceGeneral.toFixed(1)}%`, "Sobre proyectado filtrado"],
+    ];
+  } else if (ui.activeBudgetPanel === "invoices") {
+    cards = [
+      ["Facturas registradas", String(consistency.totalInvoices), "Total en el sistema"],
+      ["Items con compra", String(purchasedOnly.length), "Con al menos una factura"],
+      ["Repetidas proveedor-dia", String(consistency.repeatedSupplierDay), "Mismo proveedor mas de una vez al dia"],
+      ["Numeros de factura duplicados", String(consistency.duplicatedInvoiceNumber), "Mismo numero en mas de un registro"],
+      ["Facturas huerfanas", String(consistency.orphanInvoices), "Sin item relacionado"],
+      ["Proyecto inconsistente", String(consistency.projectMismatches), "Proyecto factura vs item"],
+      ["Sin lugar de compra", String(consistency.invoicesWithoutLocation), "Facturas incompletas"],
+      ["Items sin seccion valida", String(consistency.itemsWithoutSection), "Revisar seccion operativa"],
+    ];
+  } else {
+    cards = [
+      ["Ref. total proyectado", formatCurrency(total.estimado), `${escapeHtml(projectLabel)} · ${total.items} items`],
+      ["Comprado real", formatCurrency(total.real), `${escapeHtml(sectionLabel)}`],
+      ["Pendiente", formatCurrency(total.pendiente), "Falta por comprar"],
+      ["Avance (%)", `${avanceGeneral.toFixed(1)}%`, "Real vs proyectado"],
+      ["Proyecto 8kW", formatCurrency(p8.estimado), `Real ${formatCurrency(p8.real)}`],
+      ["Proyecto 20kW", formatCurrency(p20.estimado), `Real ${formatCurrency(p20.real)}`],
+      ["Items comprados", String(comprados), "Estado completo"],
+      ["Items faltantes", String(faltantes), "Pendiente de compra"],
+    ];
+  }
 
-  // Totales por seccion (solo utiles en vista unificada)
-  const sectionTotals =
-    projectFilter === "ALL"
-      ? SECCIONES_OPERATIVAS.filter((sec) => (bySection[sec]?.items || 0) > 0)
-          .map((sec) => kpiPartCard(`${sec} (ambos proyectos)`, bySection[sec], "kpi-section-total"))
+  el.budgetSummary.innerHTML = `<div class="kpi-row-8">${cards
+    .map((card, index) => `
+      <article class="kpi ${index === 0 ? "kpi-muted" : ""}">
+        <div class="label">${card[0]}</div>
+        <div class="value">${card[1]}</div>
+        <div class="kpi-sub">${card[2]}</div>
+      </article>`)
+    .join("")}</div>`;
+}
+
+function renderHomeSummary() {
+  if (!el.homeSummary8 || !el.homeSummary20) return;
+  const all = sumParts(state.items);
+  const p8 = all.byProject["8kW"] || { estimado: 0, real: 0, pendiente: 0, items: 0 };
+  const p20 = all.byProject["20kW"] || { estimado: 0, real: 0, pendiente: 0, items: 0 };
+  const a8 = p8.estimado > 0 ? (p8.real / p8.estimado) * 100 : 0;
+  const a20 = p20.estimado > 0 ? (p20.real / p20.estimado) * 100 : 0;
+  const totalEst = p8.estimado + p20.estimado;
+  const totalReal = p8.real + p20.real;
+  const totalPend = p8.pendiente + p20.pendiente;
+  const avance = totalEst > 0 ? (totalReal / totalEst) * 100 : 0;
+  const faltantes = state.items.filter((x) => getDifference(x) > 0).length;
+  const facturas = state.invoices.length;
+
+  if (el.homeGlobalKpis) {
+    el.homeGlobalKpis.innerHTML = `
+      <article class="home-metric"><span>Proyectado total</span><strong>${formatCurrency(totalEst)}</strong></article>
+      <article class="home-metric"><span>Comprado real</span><strong>${formatCurrency(totalReal)}</strong></article>
+      <article class="home-metric"><span>Pendiente</span><strong>${formatCurrency(totalPend)}</strong></article>
+      <article class="home-metric"><span>Avance global</span><strong>${avance.toFixed(1)}%</strong></article>
+      <article class="home-metric"><span>Items faltantes</span><strong>${faltantes}</strong></article>
+      <article class="home-metric"><span>Facturas</span><strong>${facturas}</strong></article>
+    `;
+  }
+
+  const metrics = (p) => `
+    <div class="home-metric"><span>Proyectado</span><strong>${formatCurrency(p.estimado)}</strong></div>
+    <div class="home-metric"><span>Comprado</span><strong>${formatCurrency(p.real)}</strong></div>
+    <div class="home-metric"><span>Pendiente</span><strong>${formatCurrency(p.pendiente)}</strong></div>
+    <div class="home-metric"><span>Items</span><strong>${p.items}</strong></div>
+  `;
+  el.homeSummary8.innerHTML = metrics(p8);
+  el.homeSummary20.innerHTML = metrics(p20);
+
+  if (el.homeAvance8) el.homeAvance8.textContent = `${a8.toFixed(1)}%`;
+  if (el.homeAvance20) el.homeAvance20.textContent = `${a20.toFixed(1)}%`;
+  if (el.homeBar8) el.homeBar8.style.width = `${Math.min(100, Math.max(0, a8))}%`;
+  if (el.homeBar20) el.homeBar20.style.width = `${Math.min(100, Math.max(0, a20))}%`;
+
+  const sectionRows = (project) =>
+    SECCIONES_OPERATIVAS.map((sec) => {
+      const part = all.byProjectSection?.[project]?.[sec] || { estimado: 0, real: 0, pendiente: 0, items: 0 };
+      if (!part.items) return "";
+      const pct = part.estimado > 0 ? (part.real / part.estimado) * 100 : 0;
+      return `<div class="home-section-row"><span>${escapeHtml(sec)}</span><strong>${pct.toFixed(0)}% · Pend. ${formatCurrency(part.pendiente)}</strong></div>`;
+    }).join("");
+
+  if (el.homeSections8) el.homeSections8.innerHTML = sectionRows("8kW") || '<div class="home-pending-empty">Sin secciones con datos.</div>';
+  if (el.homeSections20) el.homeSections20.innerHTML = sectionRows("20kW") || '<div class="home-pending-empty">Sin secciones con datos.</div>';
+
+  if (el.homePending) {
+    const pending = state.items
+      .filter((item) => getDifference(item) > 0)
+      .map((item) => ({
+        item,
+        faltante: getDifference(item),
+        costo: getDifference(item) * toNumber(item.precioPromedioInternet),
+      }))
+      .sort((a, b) => b.costo - a.costo)
+      .slice(0, 6);
+
+    el.homePending.innerHTML = pending.length
+      ? pending
+          .map(
+            ({ item, faltante, costo }) => `
+        <div class="home-pending-item">
+          ${badge(item.project)}
+          <div class="meta">
+            <strong>${escapeHtml(item.descripcion)}</strong>
+            <small>${escapeHtml(item.seccionOperativa)} · Faltan ${faltante.toFixed(2)} ${escapeHtml(item.unidad)}</small>
+          </div>
+          <strong>${formatCurrency(costo)}</strong>
+        </div>`
+          )
           .join("")
-      : "";
+      : '<div class="home-pending-empty">No hay pendientes criticos. Todo al dia.</div>';
+  }
+}
 
-  el.budgetSummary.innerHTML = `
-    <article class="kpi kpi-highlight">
-      <div class="label">Suma filtrada · ${escapeHtml(projectLabel)}</div>
-      <div class="value">${formatCurrency(total.estimado)}</div>
-      <div class="kpi-sub">${escapeHtml(sectionLabel)} · ${total.items} items · Real ${formatCurrency(total.real)} · Pend. ${formatCurrency(total.pendiente)}</div>
-    </article>
-    ${projectBlocks}
-    ${sectionTotals ? `<div class="kpi-section-totals">${sectionTotals}</div>` : ""}
+function renderConsistencySummary() {
+  if (!el.consistencySummary) return;
+  const c = getDataConsistencyReport();
+  const totalCompradoFacturas = state.invoices.reduce((acc, inv) => acc + toNumber(inv.total), 0);
+  el.consistencySummary.innerHTML = `
+    <article class="kpi kpi-highlight"><div class="label">Total comprado (facturas)</div><div class="value">${formatCurrency(totalCompradoFacturas)}</div></article>
+    <article class="kpi"><div class="label">Facturas</div><div class="value">${c.totalInvoices}</div></article>
+    <article class="kpi"><div class="label">Items</div><div class="value">${c.totalItems}</div></article>
+    <article class="kpi"><div class="label">Repetidas proveedor-dia</div><div class="value">${c.repeatedSupplierDay}</div></article>
+    <article class="kpi"><div class="label">Inconsistencias</div><div class="value">${c.orphanInvoices + c.projectMismatches + c.duplicatedInvoiceNumber + c.itemsWithoutSection + c.invoicesWithoutLocation}</div></article>
   `;
 }
 
@@ -604,6 +962,13 @@ function renderItemsTable() {
       if (a.seccionOperativa !== b.seccionOperativa) return a.seccionOperativa.localeCompare(b.seccionOperativa);
       return a.descripcion.localeCompare(b.descripcion);
     });
+  const latestInvoiceByItem = {};
+  for (const inv of state.invoices) {
+    const current = latestInvoiceByItem[inv.itemId];
+    if (!current || (inv.date || "") > (current.date || "")) {
+      latestInvoiceByItem[inv.itemId] = inv;
+    }
+  }
 
   const crossStatus = (item) => {
     const qtyDiff = getDifference(item);
@@ -631,14 +996,17 @@ function renderItemsTable() {
       </tr>`;
 
   if (!filtered.length) {
+    if (el.purchasesMeta) {
+      el.purchasesMeta.innerHTML = "Items comprados: <strong>0</strong> · Total acumulado: <strong>$0</strong>";
+    }
     if (el.projectedBody) {
       el.projectedBody.innerHTML = emptyHtml(8, "No hay items con este filtro.");
     }
     if (el.purchasesBody) {
-      el.purchasesBody.innerHTML = emptyHtml(7, "No hay compras para este filtro.");
+      el.purchasesBody.innerHTML = emptyHtml(8, "No hay compras para este filtro.");
     }
     if (el.crosscheckBody) {
-      el.crosscheckBody.innerHTML = emptyHtml(9, "No hay datos para cruzar con este filtro.");
+      el.crosscheckBody.innerHTML = emptyHtml(11, "No hay datos para cruzar con este filtro.");
     }
     if (el.itemsBody) {
       el.itemsBody.innerHTML = emptyHtml(10, "No hay items con este filtro.");
@@ -672,10 +1040,21 @@ function renderItemsTable() {
   }
 
   if (el.purchasesBody) {
-    el.purchasesBody.innerHTML = sorted
+    const purchasedOnly = sorted.filter((item) => toNumber(item.cantidadComprada) > 0);
+    const totalPurchased = purchasedOnly.reduce((acc, item) => acc + getTotals(item).real, 0);
+    if (el.purchasesMeta) {
+      el.purchasesMeta.innerHTML = `Items comprados: <strong>${purchasedOnly.length}</strong> · Total acumulado: <strong>${formatCurrency(totalPurchased)}</strong>`;
+    }
+    if (!purchasedOnly.length) {
+      el.purchasesBody.innerHTML = emptyHtml(8, "Aun no hay compras registradas para este filtro.");
+    } else {
+      el.purchasesBody.innerHTML = purchasedOnly
       .map((item) => {
-        const st = getStatus(item);
         const totalReal = getTotals(item).real;
+        const inv = latestInvoiceByItem[item.id];
+        const lastPurchase = inv
+          ? `${escapeHtml(inv.date || "-")} · ${escapeHtml(inv.supplier || "-")} · ${escapeHtml(inv.number || "-")}`
+          : "Compra manual / sin factura";
         return `
       <tr>
         <td data-label="Proyecto">${badge(item.project)}</td>
@@ -683,16 +1062,19 @@ function renderItemsTable() {
           <div class="item-title">${escapeHtml(item.descripcion)}</div>
           <div class="item-sub">${escapeHtml(item.unidad)}</div>
         </td>
+        <td data-label="Seccion operativa">${sectionSelectHtml(item)}</td>
         <td data-label="Cant. real">${toNumber(item.cantidadComprada).toFixed(2)}</td>
         <td data-label="Precio real">${formatCurrency(item.precioReal)}</td>
         <td data-label="Total comprado">${formatCurrency(totalReal)}</td>
-        <td data-label="Estado">${statusChip(st)}</td>
+        <td data-label="Ultima compra"><small>${lastPurchase}</small></td>
         <td data-label="Accion">
           <button type="button" class="ghost icon-btn" data-detail-id="${item.id}" title="Ver detalle">🔎 <span>Ver</span></button>
+          <button type="button" class="danger ghost icon-btn" data-delete-id="${item.id}" title="Eliminar">🗑 <span>Del</span></button>
         </td>
       </tr>`;
       })
       .join("");
+    }
   }
 
   if (el.crosscheckBody) {
@@ -704,6 +1086,7 @@ function renderItemsTable() {
       <tr>
         <td data-label="Proyecto">${badge(item.project)}</td>
         <td data-label="Descripcion">${escapeHtml(item.descripcion)}</td>
+        <td data-label="Seccion operativa">${sectionSelectHtml(item)}</td>
         <td data-label="Cant. proyectada">${toNumber(item.cantidadProyectada).toFixed(2)}</td>
         <td data-label="Cant. real">${toNumber(item.cantidadComprada).toFixed(2)}</td>
         <td data-label="Diferencia">${diff.toFixed(2)}</td>
@@ -711,6 +1094,10 @@ function renderItemsTable() {
         <td data-label="Precio real">${formatCurrency(item.precioReal)}</td>
         <td data-label="Costo faltante">${formatCurrency(Math.max(0, diff) * toNumber(item.precioPromedioInternet))}</td>
         <td data-label="Verificacion"><span class="crosscheck-chip ${cross.cls}">${cross.label}</span></td>
+        <td data-label="Accion">
+          <button type="button" class="ghost icon-btn" data-detail-id="${item.id}" title="Ver detalle">🔎 <span>Ver</span></button>
+          <button type="button" class="danger ghost icon-btn" data-delete-id="${item.id}" title="Eliminar">🗑 <span>Del</span></button>
+        </td>
       </tr>`;
       })
       .join("");
@@ -725,9 +1112,72 @@ function renderInvoiceItemOptions() {
     .join("");
 }
 
+function buildInvoiceGroups(invoices) {
+  const groups = {};
+  for (const raw of invoices) {
+    const inv = { ...raw };
+    const supplier = (inv.supplier || "").trim().toLowerCase();
+    const number = (inv.number || "").trim().toLowerCase();
+    // Agrupa por factura real: no mezclar PAEA15795 con devolucion PAEA15807.
+    if (supplier.includes("soluciones electricas")) {
+      inv.date = "2026-07-10";
+      if (!inv.number) inv.number = "N3598";
+    }
+    if (supplier.includes("grupo defa")) {
+      inv.date = inv.date || "2026-07-09";
+      if (
+        number.includes("15807") ||
+        (`${inv.itemDescription || ""} ${inv.itemId || ""}`.toLowerCase().includes("ajuste") &&
+          `${inv.itemDescription || ""}`.toLowerCase().includes("conduleta"))
+      ) {
+        inv.number = "PAEA15807";
+      } else if (!inv.number || number.includes("15795")) {
+        inv.number = "PAEA15795";
+      }
+    }
+    // Siempre preferir link de Drive actualizado.
+    inv.fileLink = normalizeInvoiceFileLink(inv.fileLink || inferInvoiceFileLink(inv));
+    const key = `${inv.date || ""}__${supplier}__${(inv.number || "").trim().toLowerCase()}`;
+    if (!groups[key]) {
+      groups[key] = {
+        key,
+        date: inv.date || "",
+        number: inv.number || "",
+        supplier: inv.supplier || "",
+        location: inv.location || "",
+        project: inv.project || "",
+        ids: [],
+        qty: 0,
+        total: 0,
+        itemDescriptions: new Set(),
+        fileLinks: new Set(),
+      };
+    }
+    const g = groups[key];
+    g.ids.push(inv.id);
+    g.qty += toNumber(inv.qty);
+    g.total += toNumber(inv.total);
+    g.itemDescriptions.add(inv.itemDescription || "");
+    if (inv.fileLink) g.fileLinks.add(inv.fileLink);
+    if (!g.project && inv.project) g.project = inv.project;
+    if (!g.location && inv.location) g.location = inv.location;
+  }
+  return Object.values(groups)
+    .map((g) => ({
+      ...g,
+      unitPrice: g.qty > 0 ? g.total / g.qty : 0,
+      itemSummary:
+        g.itemDescriptions.size <= 1
+          ? [...g.itemDescriptions][0] || "-"
+          : `${g.itemDescriptions.size} items en una factura`,
+      hasFileLink: g.fileLinks.size > 0,
+    }))
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+}
+
 function renderInvoicesTable() {
-  el.invoicesBody.innerHTML = [...state.invoices]
-    .sort((a, b) => (a.date < b.date ? 1 : -1))
+  const grouped = buildInvoiceGroups(state.invoices);
+  el.invoicesBody.innerHTML = grouped
     .map((inv) => `
       <tr>
         <td data-label="Fecha">${escapeHtml(inv.date)}</td>
@@ -735,16 +1185,73 @@ function renderInvoicesTable() {
         <td data-label="Proveedor">${escapeHtml(inv.supplier)}</td>
         <td data-label="Lugar">${escapeHtml(inv.location || "-")}</td>
         <td data-label="Proyecto">${badge(inv.project)}</td>
-        <td data-label="Item"><small>${escapeHtml(inv.itemDescription || "")}</small></td>
+        <td data-label="Item"><small>${escapeHtml(inv.itemSummary || "")}</small></td>
         <td data-label="Cant.">${toNumber(inv.qty).toFixed(2)}</td>
         <td data-label="P.U.">${formatCurrency(inv.unitPrice)}</td>
         <td data-label="Total">${formatCurrency(inv.total)}</td>
         <td data-label="Acciones">
-          <button type="button" class="ghost icon-btn" data-edit-invoice-id="${inv.id}" title="Editar">✏️ <span>Editar</span></button>
-          <button type="button" class="danger ghost icon-btn" data-delete-invoice-id="${inv.id}" title="Eliminar">🗑 <span>Del</span></button>
+          <button type="button" class="ghost icon-btn" data-view-invoice-group="${escapeHtml(inv.ids.join(","))}" title="Ver detalle">🔎 <span>Ver</span></button>
+          ${
+            inv.ids.length === 1
+              ? `<button type="button" class="ghost icon-btn" data-edit-invoice-id="${inv.ids[0]}" title="Editar">✏️ <span>Editar</span></button>`
+              : `<button type="button" class="ghost icon-btn" disabled title="Factura agrupada">📦 <span>Grupo</span></button>`
+          }
+          ${inv.hasFileLink ? `<button type="button" class="ghost icon-btn" data-open-invoice-group-link="${escapeHtml(inv.ids.join(","))}" title="Abrir PDF en Google Drive">📄 <span>PDF</span></button>` : ""}
+          <button type="button" class="danger ghost icon-btn" data-delete-invoice-group="${escapeHtml(inv.ids.join(","))}" title="Eliminar">🗑 <span>Del</span></button>
         </td>
       </tr>`)
     .join("");
+}
+
+function openInvoiceGroupDetail(idsCsv) {
+  if (!el.invoiceGroupDialog || !el.invoiceDetailBody) return;
+  const ids = (idsCsv || "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+  if (!ids.length) return;
+  const set = new Set(ids);
+  const lines = state.invoices.filter((inv) => set.has(inv.id));
+  if (!lines.length) return;
+  lines.sort((a, b) => (a.itemDescription || "").localeCompare(b.itemDescription || ""));
+  const total = lines.reduce((acc, inv) => acc + toNumber(inv.total), 0);
+  const qty = lines.reduce((acc, inv) => acc + toNumber(inv.qty), 0);
+  const base = lines[0];
+  if (el.invoiceDetailTitle) {
+    el.invoiceDetailTitle.textContent = `Detalle factura ${base.number || ""}`.trim();
+  }
+  if (el.invoiceDetailMeta) {
+    el.invoiceDetailMeta.innerHTML = `${escapeHtml(base.date || "-")} · ${escapeHtml(base.supplier || "-")} · ${lines.length} renglones · Cantidad total ${qty.toFixed(2)} · Total ${formatCurrency(total)}`;
+  }
+  const linkMap = new Map();
+  for (const line of lines) {
+    const href = getInvoiceFileHref(line.fileLink);
+    if (!href) continue;
+    if (!linkMap.has(href)) {
+      linkMap.set(href, getFileLabel(line.fileLink));
+    }
+  }
+  if (el.invoiceDetailLinks) {
+    if (linkMap.size === 0) {
+      el.invoiceDetailLinks.innerHTML = '<div class="mini-note">Archivo digital: no registrado.</div>';
+    } else {
+      el.invoiceDetailLinks.innerHTML = [...linkMap.entries()]
+        .map(([href, label]) => `<a class="file-link-chip" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">📄 ${escapeHtml(label || "Abrir archivo digital")}</a>`)
+        .join("");
+    }
+  }
+  el.invoiceDetailBody.innerHTML = lines
+    .map(
+      (inv) => `
+      <tr>
+        <td>${escapeHtml(inv.itemDescription || "-")}</td>
+        <td>${toNumber(inv.qty).toFixed(2)}</td>
+        <td>${formatCurrency(inv.unitPrice)}</td>
+        <td>${formatCurrency(inv.total)}</td>
+      </tr>`
+    )
+    .join("");
+  el.invoiceGroupDialog.showModal();
 }
 
 function renderPendingTable() {
@@ -864,12 +1371,41 @@ function renderCharts() {
 }
 
 function setTab(target) {
+  const isHome = target === "home";
   const isBudget = target === "budget";
+  const isAnalytics = target === "analytics";
+  ui.activeTab = target;
+  el.tabHome?.classList.toggle("active", isHome);
   el.tabBudget.classList.toggle("active", isBudget);
-  el.tabAnalytics.classList.toggle("active", !isBudget);
+  el.tabAnalytics.classList.toggle("active", isAnalytics);
+  el.viewHome?.classList.toggle("active", isHome);
   el.viewBudget.classList.toggle("active", isBudget);
-  el.viewAnalytics.classList.toggle("active", !isBudget);
-  if (!isBudget) { syncCanvasDpi(); renderCharts(); }
+  el.viewAnalytics.classList.toggle("active", isAnalytics);
+  if (isAnalytics) { syncCanvasDpi(); renderCharts(); }
+  saveUiState();
+}
+
+function setBudgetPanel(target, options = {}) {
+  const { ensureBudgetView = true } = options;
+  // Si el usuario navega desde analitica, cambia automaticamente a gestion.
+  if (ensureBudgetView && !el.viewBudget.classList.contains("active")) {
+    setTab("budget");
+  }
+  ui.activeBudgetPanel = target;
+  const projected = target === "projected";
+  const purchases = target === "purchases";
+  const cross = target === "cross";
+  const invoices = target === "invoices";
+  el.panelProjectedBtn?.classList.toggle("active", projected);
+  el.panelPurchasesBtn?.classList.toggle("active", purchases);
+  el.panelCrossBtn?.classList.toggle("active", cross);
+  el.panelInvoicesBtn?.classList.toggle("active", invoices);
+  el.panelProjected?.classList.toggle("active", projected);
+  el.panelPurchases?.classList.toggle("active", purchases);
+  el.panelCross?.classList.toggle("active", cross);
+  el.panelInvoices?.classList.toggle("active", invoices);
+  renderBudgetSummary();
+  saveUiState();
 }
 
 function openItemDialog(itemId) {
@@ -907,7 +1443,9 @@ function saveItemDialog() {
 
 function rerender() {
   recalcCompradas();
+  renderHomeSummary();
   renderBudgetSummary();
+  renderConsistencySummary();
   renderKpis();
   renderAiuTable();
   renderItemsTable();
@@ -935,6 +1473,7 @@ function collectInvoiceFormData() {
     number: el.invoiceNumber.value.trim(),
     supplier: el.invoiceSupplier.value.trim(),
     location: el.invoiceLocation.value.trim(),
+    fileLink: normalizeInvoiceFileLink(el.invoiceFileLink?.value || ""),
     qty: toNumber(el.invoiceQty.value),
     unitPrice: toNumber(el.invoiceUnitPrice.value),
     itemId: el.invoiceItem.value,
@@ -958,9 +1497,9 @@ function exportJsonBackup() {
 }
 
 function exportInvoicesCsv() {
-  const rows = [["fecha","factura","proveedor","donde_se_compro","proyecto","descripcion","cantidad","precioUnitario","total"]];
+  const rows = [["fecha","factura","proveedor","donde_se_compro","archivo_digital","proyecto","descripcion","cantidad","precioUnitario","total"]];
   for (const inv of state.invoices) {
-    rows.push([inv.date, inv.number, inv.supplier, inv.location || "", inv.project, inv.itemDescription, inv.qty, inv.unitPrice, inv.total]);
+    rows.push([inv.date, inv.number, inv.supplier, inv.location || "", inv.fileLink || "", inv.project, inv.itemDescription, inv.qty, inv.unitPrice, inv.total]);
   }
   const csv = rows.map((line) => line.map((v) => `"${String(v).replaceAll('"', '""')}"`).join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -973,8 +1512,33 @@ function exportInvoicesCsv() {
 }
 
 function setupEvents() {
+  el.tabHome?.addEventListener("click", () => setTab("home"));
   el.tabBudget.addEventListener("click", () => setTab("budget"));
   el.tabAnalytics.addEventListener("click", () => setTab("analytics"));
+  el.panelProjectedBtn?.addEventListener("click", () => setBudgetPanel("projected"));
+  el.panelPurchasesBtn?.addEventListener("click", () => setBudgetPanel("purchases"));
+  el.panelCrossBtn?.addEventListener("click", () => setBudgetPanel("cross"));
+  el.panelInvoicesBtn?.addEventListener("click", () => setBudgetPanel("invoices"));
+
+  document.addEventListener("click", (event) => {
+    const goto = event.target.closest("[data-home-goto]");
+    if (!goto) return;
+    const target = goto.getAttribute("data-home-goto");
+    const project = goto.getAttribute("data-home-project");
+    if (project && el.projectFilter) {
+      el.projectFilter.value = project;
+    }
+    if (target === "invoices") {
+      setTab("budget");
+      setBudgetPanel("invoices");
+    } else if (target === "budget") {
+      setTab("budget");
+      setBudgetPanel("projected");
+    } else if (target === "analytics") {
+      setTab("analytics");
+    }
+    rerender();
+  });
 
   for (const c of [el.projectFilter, el.searchInput, el.statusFilter]) {
     c.addEventListener("input", rerender);
@@ -1064,6 +1628,32 @@ function setupEvents() {
   });
 
   el.invoicesBody.addEventListener("click", async (event) => {
+    const view = event.target.closest("[data-view-invoice-group]");
+    if (view) {
+      openInvoiceGroupDetail(view.getAttribute("data-view-invoice-group"));
+      return;
+    }
+    const openFile = event.target.closest("[data-open-invoice-group-link]");
+    if (openFile) {
+      const ids = (openFile.getAttribute("data-open-invoice-group-link") || "")
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean);
+      const set = new Set(ids);
+      const lines = state.invoices.filter((x) => set.has(x.id));
+      // Preferir link Drive; si hay varios (DEFA + devolucion), abrir el de la factura del grupo.
+      const withLink = lines.find((x) => getInvoiceFileHref(x.fileLink || inferInvoiceFileLink(x)));
+      const href = getInvoiceFileHref(withLink?.fileLink || inferInvoiceFileLink(withLink) || "");
+      if (!href) {
+        window.alert("Esta factura no tiene PDF en Google Drive.");
+        return;
+      }
+      const opened = window.open(href, "_blank", "noopener,noreferrer");
+      if (!opened) {
+        window.alert("El navegador bloqueo la ventana. Permite popups o abre el link desde Ver.");
+      }
+      return;
+    }
     const edit = event.target.closest("[data-edit-invoice-id]");
     if (edit) {
       const inv = state.invoices.find((x) => x.id === edit.getAttribute("data-edit-invoice-id"));
@@ -1079,17 +1669,23 @@ function setupEvents() {
       el.invoiceItem.value = inv.itemId;
       el.invoiceQty.value = inv.qty;
       el.invoiceUnitPrice.value = inv.unitPrice;
+      if (el.invoiceFileLink) el.invoiceFileLink.value = inv.fileLink || "";
       return;
     }
-    const del = event.target.closest("[data-delete-invoice-id]");
-    if (!del) return;
+    const delGroup = event.target.closest("[data-delete-invoice-group]");
+    if (!delGroup) return;
     const ok = await askConfirm({
       title: "Eliminar factura",
-      message: "Deseas eliminar esta factura?",
+      message: "Deseas eliminar esta factura (o grupo de factura)?",
       confirmLabel: "Eliminar",
     });
     if (!ok) return;
-    state.invoices = state.invoices.filter((x) => x.id !== del.getAttribute("data-delete-invoice-id"));
+    const ids = (delGroup.getAttribute("data-delete-invoice-group") || "")
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+    const set = new Set(ids);
+    state.invoices = state.invoices.filter((x) => !set.has(x.id));
     rerender();
   });
 
@@ -1145,6 +1741,7 @@ function setupEvents() {
   });
 
   el.closeItemDialogBtn.addEventListener("click", () => el.itemDialog.close());
+  el.closeInvoiceDetailBtn?.addEventListener("click", () => el.invoiceGroupDialog?.close());
   el.saveItemDetailBtn.addEventListener("click", saveItemDialog);
 
   window.addEventListener("resize", () => {
@@ -1156,6 +1753,30 @@ function setupEvents() {
 }
 
 setupEvents();
-setTab("budget");
+initTheme();
+setTab(ui.activeTab);
+setBudgetPanel(ui.activeBudgetPanel, { ensureBudgetView: false });
 resetInvoiceForm();
 rerender();
+
+function initTheme() {
+  const THEME_KEY = "tabarec_theme_v1";
+  const saved = localStorage.getItem(THEME_KEY);
+  const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const theme = saved === "dark" || saved === "light" ? saved : prefersDark ? "dark" : "light";
+  applyTheme(theme);
+  if (!el.themeToggle) return;
+  el.themeToggle.checked = theme === "dark";
+  el.themeToggle.addEventListener("change", () => {
+    const next = el.themeToggle.checked ? "dark" : "light";
+    applyTheme(next);
+    localStorage.setItem(THEME_KEY, next);
+  });
+}
+
+function applyTheme(theme) {
+  const dark = theme === "dark";
+  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+  if (el.themeToggle) el.themeToggle.checked = dark;
+  if (el.themeSwitchLabel) el.themeSwitchLabel.textContent = dark ? "Oscuro" : "Claro";
+}

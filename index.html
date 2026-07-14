@@ -3,25 +3,113 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Control Presupuestal TABAREC Pro</title>
+  <title>Control Presupuestal TABAREC</title>
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("tabarec_theme_v1");
+        if (t !== "dark" && t !== "light") {
+          t = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {}
+    })();
+  </script>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="topbar">
     <div>
-      <h1>Control Presupuestal TABAREC Pro</h1>
+      <h1>Control Presupuestal TABAREC</h1>
+      <p class="topbar-sub">Edificio TABAREC · SFV 8kW + 20kW</p>
     </div>
+    <label class="theme-switch" for="themeToggle">
+      <span class="theme-switch-label" id="themeSwitchLabel">Claro</span>
+      <input id="themeToggle" type="checkbox" role="switch" aria-label="Cambiar modo oscuro">
+      <span class="theme-slider" aria-hidden="true"></span>
+    </label>
   </header>
 
   <main class="layout">
-    <section class="tabs-card">
-      <div class="tabs">
-        <button id="tabBudget" class="tab-btn active" type="button">Gestion de presupuesto</button>
+    <aside class="card side-nav">
+      <div class="side-group">
+        <div class="side-title">Navegacion</div>
+        <div class="tabs side-tabs">
+        <button id="tabHome" class="tab-btn active" type="button">Home</button>
+        <button id="tabBudget" class="tab-btn" type="button">Gestion de presupuesto</button>
         <button id="tabAnalytics" class="tab-btn" type="button">Indicadores y analitica</button>
+        </div>
       </div>
+      <div class="side-group">
+        <div class="side-title">Gestion</div>
+        <div class="budget-panels-tabs side-tabs">
+          <button id="panelProjectedBtn" class="tab-btn active" type="button">Presupuesto proyectado</button>
+          <button id="panelPurchasesBtn" class="tab-btn" type="button">Compras ejecutadas</button>
+          <button id="panelCrossBtn" class="tab-btn" type="button">Cruce y verificacion</button>
+          <button id="panelInvoicesBtn" class="tab-btn" type="button">Registro de facturas</button>
+        </div>
+      </div>
+    </aside>
+
+    <section class="main-content">
+
+    <section id="viewHome" class="view active">
+      <section class="card home-hero">
+        <div class="home-hero-copy">
+          <p class="home-kicker">Panel de control</p>
+          <h2>Resumen operativo TABAREC</h2>
+          <p class="table-help">Avance de compras, pendientes por seccion y acceso rapido a gestion.</p>
+        </div>
+        <div id="homeGlobalKpis" class="home-global-kpis"></div>
+      </section>
+
+      <section class="home-grid">
+        <article class="card home-card home-card-8">
+          <div class="home-card-head">
+            <div>
+              <span class="project-badge p8">8kW</span>
+              <h3>Zonas comunes</h3>
+            </div>
+            <div id="homeAvance8" class="home-avance">0%</div>
+          </div>
+          <div class="home-progress"><span id="homeBar8"></span></div>
+          <div id="homeSummary8" class="home-metrics"></div>
+          <div id="homeSections8" class="home-sections"></div>
+          <p class="mini-note">12 × LONGi 650W · SUN2000-8K-LC0</p>
+          <div class="home-actions">
+            <button type="button" class="ghost" data-home-goto="budget" data-home-project="8kW">Ver presupuesto</button>
+            <button type="button" class="ghost" data-home-goto="invoices" data-home-project="8kW">Ver compras</button>
+          </div>
+        </article>
+
+        <article class="card home-card home-card-20">
+          <div class="home-card-head">
+            <div>
+              <span class="project-badge p20">20kW</span>
+              <h3>Laboratorio / principal</h3>
+            </div>
+            <div id="homeAvance20" class="home-avance">0%</div>
+          </div>
+          <div class="home-progress"><span id="homeBar20"></span></div>
+          <div id="homeSummary20" class="home-metrics"></div>
+          <div id="homeSections20" class="home-sections"></div>
+          <p class="mini-note">39 × LONGi 650W · 2 × SUN2000-10K-LC0</p>
+          <div class="home-actions">
+            <button type="button" class="ghost" data-home-goto="budget" data-home-project="20kW">Ver presupuesto</button>
+            <button type="button" class="ghost" data-home-goto="invoices" data-home-project="20kW">Ver compras</button>
+          </div>
+        </article>
+      </section>
+
+      <section class="card">
+        <div class="section-title">
+          <h2>Pendientes criticos</h2>
+        </div>
+        <div id="homePending" class="home-pending"></div>
+      </section>
     </section>
 
-    <section id="viewBudget" class="view active">
+    <section id="viewBudget" class="view">
     <section class="card filters-card">
       <div class="controls">
         <label>Vista
@@ -71,7 +159,7 @@
     </section>
 
     <section class="split-grid">
-      <section class="card">
+      <section id="panelProjected" class="card budget-panel active">
         <div class="section-title">
           <h2>Presupuesto proyectado</h2>
           <button id="addItemBtn" type="button">+ Agregar item</button>
@@ -99,12 +187,13 @@
         </div>
       </section>
 
-      <section class="card">
+      <section id="panelPurchases" class="card budget-panel">
         <div class="section-title">
           <h2>Compras ejecutadas</h2>
         </div>
+        <p id="purchasesMeta" class="table-help"></p>
         <p class="table-help">
-          Seguimiento de compras reales por item para validar avance.
+          Solo muestra items con compras acumuladas reales.
         </p>
         <div class="table-wrap">
           <table class="items-table purchase-table">
@@ -112,10 +201,11 @@
               <tr>
                 <th>Proyecto</th>
                 <th>Descripcion</th>
+                <th>Seccion operativa</th>
                 <th>Cant. real</th>
                 <th>Precio real (COP)</th>
                 <th>Total comprado</th>
-                <th>Estado</th>
+                <th>Ultima compra</th>
                 <th>Accion</th>
               </tr>
             </thead>
@@ -124,7 +214,7 @@
         </div>
       </section>
 
-      <section class="card">
+      <section id="panelCross" class="card budget-panel">
         <div class="section-title">
           <h2>Cruce y verificacion</h2>
         </div>
@@ -137,6 +227,7 @@
               <tr>
                 <th>Proyecto</th>
                 <th>Descripcion</th>
+                <th>Seccion operativa</th>
                 <th>Cant. proyectada</th>
                 <th>Cant. real</th>
                 <th>Diferencia</th>
@@ -144,56 +235,60 @@
                 <th>Precio real</th>
                 <th>Costo faltante</th>
                 <th>Verificacion</th>
+                <th>Accion</th>
               </tr>
             </thead>
             <tbody id="crosscheckBody"></tbody>
           </table>
         </div>
       </section>
-    </section>
 
-    <section class="card">
-      <div class="section-title">
-        <h2>Registro de facturas</h2>
-        <div class="invoice-actions">
-          <button id="exportInvoicesCsvBtn" type="button" class="ghost">Exportar facturas CSV</button>
-          <button id="clearInvoicesBtn" type="button" class="danger ghost">Borrar facturas</button>
+      <section id="panelInvoices" class="card budget-panel">
+        <div class="section-title">
+          <h2>Registro de facturas</h2>
+          <div class="invoice-actions">
+            <button id="exportInvoicesCsvBtn" type="button" class="ghost">Exportar facturas CSV</button>
+            <button id="clearInvoicesBtn" type="button" class="danger ghost">Borrar facturas</button>
+          </div>
         </div>
-      </div>
-      <form id="invoiceForm" class="invoice-form">
-        <input id="invoiceDate" type="date" required>
-        <input id="invoiceNumber" type="text" placeholder="Numero factura" required>
-        <input id="invoiceSupplier" type="text" placeholder="Proveedor" required>
-        <input id="invoiceLocation" type="text" placeholder="Donde se compro" required>
-        <select id="invoiceProject" required>
-          <option value="8kW">8kW</option>
-          <option value="20kW">20kW</option>
-        </select>
-        <select id="invoiceItem" required></select>
-        <input id="invoiceQty" type="number" min="0" step="0.01" placeholder="Cantidad comprada" required>
-        <input id="invoiceUnitPrice" type="number" min="0" step="1" placeholder="Precio unitario COP" required>
-        <button id="saveInvoiceBtn" type="submit">Registrar factura</button>
-      </form>
+        <p class="table-help">Puedes registrar compras repetidas del mismo proveedor en el mismo dia y luego filtrarlas en la tabla.</p>
+        <div id="consistencySummary" class="kpis"></div>
+        <form id="invoiceForm" class="invoice-form">
+          <input id="invoiceDate" type="date" required>
+          <input id="invoiceNumber" type="text" placeholder="Numero factura" required>
+          <input id="invoiceSupplier" type="text" placeholder="Proveedor" required>
+          <input id="invoiceLocation" type="text" placeholder="Donde se compro" required>
+          <select id="invoiceProject" required>
+            <option value="8kW">8kW</option>
+            <option value="20kW">20kW</option>
+          </select>
+          <select id="invoiceItem" required></select>
+          <input id="invoiceQty" type="number" min="0" step="0.01" placeholder="Cantidad comprada" required>
+          <input id="invoiceUnitPrice" type="number" min="0" step="1" placeholder="Precio unitario COP" required>
+          <input id="invoiceFileLink" type="text" placeholder="Link archivo digital (URL o ruta local)">
+          <button id="saveInvoiceBtn" type="submit">Registrar factura</button>
+        </form>
 
-      <div class="table-wrap">
-        <table class="invoices-table">
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th>Factura</th>
-              <th>Proveedor</th>
-              <th>Donde se compro</th>
-              <th>Proyecto</th>
-              <th>Item</th>
-              <th>Cantidad</th>
-              <th>Precio unitario</th>
-              <th>Total</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="invoicesBody"></tbody>
-        </table>
-      </div>
+        <div class="table-wrap">
+          <table class="invoices-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Factura</th>
+                <th>Proveedor</th>
+                <th>Donde se compro</th>
+                <th>Proyecto</th>
+                <th>Item</th>
+                <th>Cantidad</th>
+                <th>Precio unitario</th>
+                <th>Total</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="invoicesBody"></tbody>
+          </table>
+        </div>
+      </section>
     </section>
 
     <section class="card">
@@ -276,6 +371,7 @@
         </div>
       </section>
     </section>
+    </section>
   </main>
 
   <dialog id="confirmDialog" class="confirm-dialog">
@@ -347,6 +443,30 @@
 
       <div class="tools-actions">
         <button type="button" id="saveItemDetailBtn">Guardar cambios</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="invoiceGroupDialog" class="invoice-detail-dialog">
+    <form method="dialog" class="invoice-detail-body">
+      <div class="section-title">
+        <h2 id="invoiceDetailTitle">Detalle de factura</h2>
+        <button type="button" id="closeInvoiceDetailBtn" class="ghost">Cerrar</button>
+      </div>
+      <div id="invoiceDetailMeta" class="mini-note"></div>
+      <div id="invoiceDetailLinks" class="invoice-file-links"></div>
+      <div class="table-wrap compact">
+        <table>
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Cantidad</th>
+              <th>Precio unitario</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody id="invoiceDetailBody"></tbody>
+        </table>
       </div>
     </form>
   </dialog>
