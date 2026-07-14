@@ -33,6 +33,7 @@ const PROJECT_PDF_OVERRIDES = {
 // Debe declararse antes de loadState(): applyComprasImport usa estos links al migrar.
 const INVOICE_DRIVE_LINKS = {
   defa: "https://drive.google.com/file/d/1C90C9ooS0IO-1IebiyksTo1PMYT5X53J/view",
+  defa14Jul: "https://drive.google.com/file/d/1PKtGs2v05OqMwyidtyLTe6-2Bdg12loq/view?usp=sharing",
   casaDielectrica: "https://drive.google.com/file/d/1f9c-aZ18KPgx8eE6PR0wwxaWqKO6Sic5/view?usp=sharing",
   solucionesElectricas: "https://drive.google.com/file/d/1WT0s-kQ8EYK_H_RtFzNnC1E_AmbrT8tn/view?usp=sharing",
   devolucionConduleta: "https://drive.google.com/file/d/1jkqv28YnA8j8sZfMZSmMmeYtDFzyZwXq/view?usp=sharing",
@@ -461,15 +462,26 @@ function inferInvoiceFileLink(inv) {
   const supplier = (inv?.supplier || "").trim().toLowerCase();
   const number = (inv?.number || "").trim().toLowerCase();
   const desc = `${inv?.itemDescription || ""} ${inv?.itemId || ""}`.toLowerCase();
+  const linkHint = String(inv?.fileLink || "").toLowerCase();
+  if (
+    number.includes("paea15948") ||
+    number.includes("15948") ||
+    linkHint.includes("1pktgs2v05oqmwyidtylte6-2bdg12loq")
+  ) {
+    return INVOICE_DRIVE_LINKS.defa14Jul;
+  }
   if (
     number.includes("paea15807") ||
     number.includes("15807") ||
-    desc.includes("ajuste") && desc.includes("conduleta") ||
-    desc.includes("devolucion") && desc.includes("conduleta")
+    (desc.includes("ajuste") && desc.includes("conduleta")) ||
+    (desc.includes("devolucion") && desc.includes("conduleta"))
   ) {
     return INVOICE_DRIVE_LINKS.devolucionConduleta;
   }
-  if (supplier.includes("grupo defa") || number.includes("paea15795")) {
+  if (number.includes("paea15795") || number.includes("15795") || linkHint.includes("1c90c9oos0io-1iebiykstto1pmyt5x53j")) {
+    return INVOICE_DRIVE_LINKS.defa;
+  }
+  if (supplier.includes("grupo defa")) {
     return INVOICE_DRIVE_LINKS.defa;
   }
   if (supplier.includes("soluciones electricas") || number.includes("n3598")) {
@@ -494,9 +506,17 @@ function normalizeInvoiceFileLink(link) {
   if (!value) return "";
   const lower = value.toLowerCase();
   if (lower.startsWith("javascript:") || lower.startsWith("data:")) return "";
-  // Rutas locales antiguas -> Drive
-  if (lower.includes("devoluci") && lower.includes("conduleta")) return INVOICE_DRIVE_LINKS.devolucionConduleta;
-  if (lower.includes("defa")) return INVOICE_DRIVE_LINKS.defa;
+  if (lower.includes("1pktgs2v05oqmwyidtylte6-2bdg12loq") || lower.includes("compra defa 14")) {
+    return INVOICE_DRIVE_LINKS.defa14Jul;
+  }
+  if (lower.includes("1jkqv28yna8j8szfmzsmmmeytdfzyzwxq") || (lower.includes("devoluci") && lower.includes("conduleta"))) {
+    return INVOICE_DRIVE_LINKS.devolucionConduleta;
+  }
+  if (lower.includes("1c90c9oos0io-1iebiykstto1pmyt5x53j")) {
+    return INVOICE_DRIVE_LINKS.defa;
+  }
+  if (lower.includes("drive.google.com/file/d/")) return value;
+  if (lower.includes("defa") && !lower.includes("devoluci")) return INVOICE_DRIVE_LINKS.defa;
   if (lower.includes("solucione") || lower.includes("soluciones")) return INVOICE_DRIVE_LINKS.solucionesElectricas;
   if (lower.includes("casa dielectrica") || lower.includes("dielectrica")) return INVOICE_DRIVE_LINKS.casaDielectrica;
   if (lower.includes("ctshcar") || lower.includes("solar hub") || lower.includes("tabares")) {
@@ -518,6 +538,7 @@ function getInvoiceFileHref(link) {
 function getFileLabel(link) {
   const href = getInvoiceFileHref(link);
   if (!href) return "";
+  if (href.includes("1PKtGs2v05OqMwyidtyLTe6-2Bdg12loq")) return "Compra DEFA 14 de Julio.pdf (Google Drive)";
   if (href.includes("1C90C9ooS0IO-1IebiyksTo1PMYT5X53J")) return "DEFA.pdf (Google Drive)";
   if (href.includes("1f9c-aZ18KPgx8eE6PR0wwxaWqKO6Sic5")) return "Casa dielectrica.pdf (Google Drive)";
   if (href.includes("1WT0s-kQ8EYK_H_RtFzNnC1E_AmbrT8tn")) return "Soluciones electricas.pdf (Google Drive)";
@@ -1131,6 +1152,9 @@ function buildInvoiceGroups(invoices) {
           `${inv.itemDescription || ""}`.toLowerCase().includes("conduleta"))
       ) {
         inv.number = "PAEA15807";
+      } else if (number.includes("15948")) {
+        inv.number = "PAEA15948";
+        inv.date = inv.date || "2026-07-14";
       } else if (!inv.number || number.includes("15795")) {
         inv.number = "PAEA15795";
       }

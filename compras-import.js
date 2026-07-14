@@ -1,14 +1,15 @@
 /**
  * Compras desde /compras/PDF (Julio 2026).
- * DEFA: PAEA15795 + ajuste +$4.000 por devolucion/recompra conduleta.
+ * DEFA: PAEA15795 + ajuste +$4.000 + PAEA15948 (14-jul).
  * Tubo EMT/IMC: barra estandar de 3 m.
  */
 const COMPRAS_IMPORT = {
-  version: "compras-v4",
+  version: "compras-v5",
   notes: [
     "PDF Solar Hub CTSHCAR260235: $39.002.846 (51 paneles, inversores, estructura Alurack, MC4, dongle).",
     "PDF DEFA PAEA15795: $2.954.424,77 + $4.000 ajuste conduleta = $2.958.424,77.",
     "PDF Devolucion conduleta PAEA15807: se devolvio EMT 1 T y se compro EMT 1 LR; neto +$4.000 a DEFA.",
+    "PDF DEFA PAEA15948 (14-jul): $2.934.370,62 (cable #2 110 m, conector coraza 1\", grapa 3/4\").",
     "PDF Soluciones Electricas N3598: $400.000.",
     "PDF Casa Dielectrica FEA5-32889: $75.000 (2 cajas 12P).",
     "Links de archivo: Google Drive (boton Archivo abre el PDF en Drive).",
@@ -275,6 +276,28 @@ const COMPRAS_IMPORT = {
       cantidadProyectada: 12,
       precioPromedioInternet: 236,
       notas: "DEFA PAEA15795",
+    },
+    {
+      id: "shared-extra-conector-coraza-1",
+      project: "20kW",
+      section: "5. CANALIZACIONES",
+      seccionOperativa: "Conexion acometida principal",
+      descripcion: "Conector recto 1\" coraza",
+      unidad: "und",
+      cantidadProyectada: 17,
+      precioPromedioInternet: 4419,
+      notas: "DEFA PAEA15948",
+    },
+    {
+      id: "shared-extra-grapa-imc-34",
+      project: "20kW",
+      section: "5. CANALIZACIONES",
+      seccionOperativa: "Conexion acometida principal",
+      descripcion: "Grapa doble oreja 3/4\" Galv para IMC/EMT",
+      unidad: "und",
+      cantidadProyectada: 5,
+      precioPromedioInternet: 197,
+      notas: "DEFA PAEA15948",
     },
     {
       id: "shared-extra-tensor-antifraude",
@@ -993,6 +1016,51 @@ const COMPRAS_IMPORT = {
       qty: 2,
       unitPrice: 37500,
       total: 75000,
+    },
+
+    // ========== DEFA PAEA15948 — 14-jul-2026 — $2.934.370,62 (con IVA) ==========
+    // Lineas registradas a valor unitario / subtotal sin IVA (igual que PAEA15795).
+    {
+      id: "inv-defa-v5-awg2",
+      date: "2026-07-14",
+      number: "PAEA15948",
+      supplier: "GRUPO DEFA Electricos & Ferreteria",
+      location: "Pasto",
+      fileLink: "https://drive.google.com/file/d/1PKtGs2v05OqMwyidtyLTe6-2Bdg12loq/view?usp=sharing",
+      itemId: "20kW-17",
+      project: "20kW",
+      itemDescription: "MT. Cable cobre aislado #2 Centelsa CE-0502",
+      qty: 110,
+      unitPrice: 21725,
+      total: 2389750,
+    },
+    {
+      id: "inv-defa-v5-conector-coraza",
+      date: "2026-07-14",
+      number: "PAEA15948",
+      supplier: "GRUPO DEFA Electricos & Ferreteria",
+      location: "Pasto",
+      fileLink: "https://drive.google.com/file/d/1PKtGs2v05OqMwyidtyLTe6-2Bdg12loq/view?usp=sharing",
+      itemId: "shared-extra-conector-coraza-1",
+      project: "20kW",
+      itemDescription: "Conector recto 1\" coraza",
+      qty: 17,
+      unitPrice: 4418.98,
+      total: 75122.66,
+    },
+    {
+      id: "inv-defa-v5-grapa-34",
+      date: "2026-07-14",
+      number: "PAEA15948",
+      supplier: "GRUPO DEFA Electricos & Ferreteria",
+      location: "Pasto",
+      fileLink: "https://drive.google.com/file/d/1PKtGs2v05OqMwyidtyLTe6-2Bdg12loq/view?usp=sharing",
+      itemId: "shared-extra-grapa-imc-34",
+      project: "20kW",
+      itemDescription: "Grapa doble oreja 3/4\" Galv IMC/EMT",
+      qty: 5,
+      unitPrice: 197,
+      total: 985,
     },
   ],
 };
