@@ -17,9 +17,9 @@
   </script>
   <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body class="app-body">
   <header class="topbar">
-    <div>
+    <div class="topbar-copy">
       <h1>Control Presupuestal TABAREC</h1>
       <p class="topbar-sub">Edificio TABAREC · SFV 8kW + 20kW</p>
     </div>
@@ -35,18 +35,18 @@
       <div class="side-group">
         <div class="side-title">Navegacion</div>
         <div class="tabs side-tabs">
-        <button id="tabHome" class="tab-btn active" type="button">Home</button>
-        <button id="tabBudget" class="tab-btn" type="button">Gestion de presupuesto</button>
-        <button id="tabAnalytics" class="tab-btn" type="button">Indicadores y analitica</button>
+          <button id="tabHome" class="tab-btn active" type="button">Home</button>
+          <button id="tabBudget" class="tab-btn" type="button">Gestion</button>
+          <button id="tabAnalytics" class="tab-btn" type="button">Analitica</button>
         </div>
       </div>
-      <div class="side-group">
+      <div class="side-group side-group-gestion">
         <div class="side-title">Gestion</div>
         <div class="budget-panels-tabs side-tabs">
-          <button id="panelProjectedBtn" class="tab-btn active" type="button">Presupuesto proyectado</button>
-          <button id="panelPurchasesBtn" class="tab-btn" type="button">Compras ejecutadas</button>
-          <button id="panelCrossBtn" class="tab-btn" type="button">Cruce y verificacion</button>
-          <button id="panelInvoicesBtn" class="tab-btn" type="button">Registro de facturas</button>
+          <button id="panelProjectedBtn" class="tab-btn active" type="button">Proyectado</button>
+          <button id="panelPurchasesBtn" class="tab-btn" type="button">Compras</button>
+          <button id="panelCrossBtn" class="tab-btn" type="button">Cruce</button>
+          <button id="panelInvoicesBtn" class="tab-btn" type="button">Facturas</button>
         </div>
       </div>
     </aside>
@@ -55,11 +55,6 @@
 
     <section id="viewHome" class="view active">
       <section class="card home-hero">
-        <div class="home-hero-copy">
-          <p class="home-kicker">Panel de control</p>
-          <h2>Resumen operativo TABAREC</h2>
-          <p class="table-help">Avance de compras, pendientes por seccion y acceso rapido a gestion.</p>
-        </div>
         <div id="homeGlobalKpis" class="home-global-kpis"></div>
       </section>
 
@@ -111,50 +106,58 @@
 
     <section id="viewBudget" class="view">
     <section class="card filters-card">
-      <div class="controls">
-        <label>Vista
-          <select id="projectFilter">
-            <option value="ALL">Todo unificado</option>
-            <option value="8kW">Proyecto 8kW</option>
-            <option value="20kW">Proyecto 20kW</option>
-          </select>
-        </label>
-        <label>Buscar
-          <input id="searchInput" type="text" placeholder="Descripcion, seccion, notas">
-        </label>
-        <label>Estado de compra
-          <select id="statusFilter">
-            <option value="ALL">Todos</option>
-            <option value="PENDIENTE">Falta comprar</option>
-            <option value="COMPLETO">Completo</option>
-            <option value="EXCESO">Sobrecomprado</option>
-          </select>
-        </label>
-        <div class="filter-field">
-          <span class="filter-label">Seccion operativa (multi)</span>
-          <div id="sectionFilter" class="checkbox-group" title="Puedes marcar una o varias">
-            <label class="check-option">
-              <input type="checkbox" value="Conexion acometida principal" checked>
-              <span>Acometida</span>
-            </label>
-            <label class="check-option">
-              <input type="checkbox" value="Cuarto tecnico" checked>
-              <span>Cuarto tecnico</span>
-            </label>
-            <label class="check-option">
-              <input type="checkbox" value="Techo solar" checked>
-              <span>Techo solar</span>
-            </label>
+      <div class="filters-bar">
+        <button type="button" id="filtersToggleBtn" class="ghost filters-toggle" aria-expanded="false" aria-controls="filtersPanel">
+          Filtros
+        </button>
+        <span id="filtersSummary" class="filters-summary">Todo unificado · Todas las secciones</span>
+      </div>
+      <div id="filtersPanel" class="filters-panel" hidden>
+        <div class="controls">
+          <label>Vista
+            <select id="projectFilter">
+              <option value="ALL">Todo unificado</option>
+              <option value="8kW">Proyecto 8kW</option>
+              <option value="20kW">Proyecto 20kW</option>
+            </select>
+          </label>
+          <label>Buscar
+            <input id="searchInput" type="text" placeholder="Descripcion, seccion, notas">
+          </label>
+          <label>Estado de compra
+            <select id="statusFilter">
+              <option value="ALL">Todos</option>
+              <option value="PENDIENTE">Falta comprar</option>
+              <option value="COMPLETO">Completo</option>
+              <option value="EXCESO">Sobrecomprado</option>
+            </select>
+          </label>
+          <div class="filter-field">
+            <span class="filter-label">Seccion operativa (multi)</span>
+            <div id="sectionFilter" class="checkbox-group" title="Puedes marcar una o varias">
+              <label class="check-option">
+                <input type="checkbox" value="Conexion acometida principal" checked>
+                <span>Acometida</span>
+              </label>
+              <label class="check-option">
+                <input type="checkbox" value="Cuarto tecnico" checked>
+                <span>Cuarto tecnico</span>
+              </label>
+              <label class="check-option">
+                <input type="checkbox" value="Techo solar" checked>
+                <span>Techo solar</span>
+              </label>
+            </div>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="card">
-      <div class="section-title">
-        <h2>Resumen segun filtro</h2>
+    <section class="card summary-card">
+      <div class="section-title section-title-compact">
+        <h2>Resumen</h2>
+        <small class="desktop-only">Segun filtros activos</small>
       </div>
-      <p class="table-help">La suma cambia al filtrar por proyecto y por una o varias secciones (ej. Techo solar + Acometida).</p>
       <div id="budgetSummary" class="kpis"></div>
     </section>
 
@@ -165,9 +168,6 @@
           <button id="addItemBtn" type="button">+ Agregar item</button>
         </div>
         <p id="itemsFilterMeta" class="table-help"></p>
-        <p class="table-help">
-          Planeacion base por item. Puedes ajustar seccion operativa, cantidad y precio proyectado desde detalle.
-        </p>
         <div class="table-wrap">
           <table class="items-table projection-table">
             <thead>
@@ -192,9 +192,6 @@
           <h2>Compras ejecutadas</h2>
         </div>
         <p id="purchasesMeta" class="table-help"></p>
-        <p class="table-help">
-          Solo muestra items con compras acumuladas reales.
-        </p>
         <div class="table-wrap">
           <table class="items-table purchase-table">
             <thead>
@@ -218,9 +215,6 @@
         <div class="section-title">
           <h2>Cruce y verificacion</h2>
         </div>
-        <p class="table-help">
-          Correlacion entre proyectado y comprado para detectar diferencias.
-        </p>
         <div class="table-wrap">
           <table class="items-table cross-table">
             <thead>
@@ -244,30 +238,22 @@
       </section>
 
       <section id="panelInvoices" class="card budget-panel">
-        <div class="section-title">
+        <div class="section-title section-title-wrap">
           <h2>Registro de facturas</h2>
-          <div class="invoice-actions">
-            <button id="exportInvoicesCsvBtn" type="button" class="ghost">Exportar facturas CSV</button>
-            <button id="clearInvoicesBtn" type="button" class="danger ghost">Borrar facturas</button>
+          <div class="invoice-toolbar">
+            <label class="invoice-filter-inline">Comprado por
+              <select id="purchasedByFilter">
+                <option value="ALL">Todos</option>
+                <option value="Dr Tabares">Dr Tabares</option>
+                <option value="Gustavo A.">Gustavo A.</option>
+              </select>
+            </label>
+            <div class="invoice-actions">
+              <button id="clearInvoicesBtn" type="button" class="danger ghost">Borrar</button>
+            </div>
           </div>
         </div>
-        <p class="table-help">Puedes registrar compras repetidas del mismo proveedor en el mismo dia y luego filtrarlas en la tabla.</p>
-        <div id="consistencySummary" class="kpis"></div>
-        <form id="invoiceForm" class="invoice-form">
-          <input id="invoiceDate" type="date" required>
-          <input id="invoiceNumber" type="text" placeholder="Numero factura" required>
-          <input id="invoiceSupplier" type="text" placeholder="Proveedor" required>
-          <input id="invoiceLocation" type="text" placeholder="Donde se compro" required>
-          <select id="invoiceProject" required>
-            <option value="8kW">8kW</option>
-            <option value="20kW">20kW</option>
-          </select>
-          <select id="invoiceItem" required></select>
-          <input id="invoiceQty" type="number" min="0" step="0.01" placeholder="Cantidad comprada" required>
-          <input id="invoiceUnitPrice" type="number" min="0" step="1" placeholder="Precio unitario COP" required>
-          <input id="invoiceFileLink" type="text" placeholder="Link archivo digital (URL o ruta local)">
-          <button id="saveInvoiceBtn" type="submit">Registrar factura</button>
-        </form>
+        <div id="consistencySummary" class="kpis kpis-invoices"></div>
 
         <div class="table-wrap">
           <table class="invoices-table">
@@ -277,10 +263,8 @@
                 <th>Factura</th>
                 <th>Proveedor</th>
                 <th>Donde se compro</th>
-                <th>Proyecto</th>
-                <th>Item</th>
+                <th>Comprado por</th>
                 <th>Cantidad</th>
-                <th>Precio unitario</th>
                 <th>Total</th>
                 <th>Acciones</th>
               </tr>
@@ -291,18 +275,18 @@
       </section>
     </section>
 
-    <section class="card">
-      <div class="section-title">
-        <h2>Herramientas y respaldos</h2>
-      </div>
-      <div class="tools-actions">
-        <button id="exportJsonBtn" type="button" class="ghost">Exportar respaldo</button>
-        <label class="file-btn">
-          Importar respaldo
-          <input id="importJsonInput" type="file" accept="application/json">
-        </label>
-        <button id="resetDataBtn" type="button" class="danger ghost">Reiniciar datos</button>
-      </div>
+    <section class="card tools-card">
+      <details class="tools-details">
+        <summary>Herramientas y respaldos</summary>
+        <div class="tools-actions">
+          <button id="exportJsonBtn" type="button" class="ghost">Exportar respaldo</button>
+          <label class="file-btn">
+            Importar respaldo
+            <input id="importJsonInput" type="file" accept="application/json">
+          </label>
+          <button id="resetDataBtn" type="button" class="danger ghost">Reiniciar datos</button>
+        </div>
+      </details>
     </section>
     </section>
 
@@ -469,6 +453,20 @@
         </table>
       </div>
     </form>
+  </dialog>
+
+  
+  <dialog id="pdfViewerDialog" class="pdf-viewer-dialog">
+    <div class="pdf-viewer-shell">
+      <div class="pdf-viewer-header">
+        <h2 id="pdfViewerTitle">Vista PDF</h2>
+        <div class="pdf-viewer-actions">
+          <a id="pdfViewerOpenTab" class="ghost" href="#" target="_blank" rel="noopener noreferrer">Nueva pestana</a>
+          <button type="button" id="pdfViewerCloseBtn" class="ghost">Cerrar</button>
+        </div>
+      </div>
+      <iframe id="pdfViewerFrame" class="pdf-viewer-frame" title="Vista previa PDF"></iframe>
+    </div>
   </dialog>
 
   <script src="seed-data.js"></script>

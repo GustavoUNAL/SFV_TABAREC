@@ -30,19 +30,86 @@ const PROJECT_PDF_OVERRIDES = {
   ],
 };
 
-// Debe declararse antes de loadState(): applyComprasImport usa estos links al migrar.
-const INVOICE_DRIVE_LINKS = {
-  defa: "https://drive.google.com/file/d/1C90C9ooS0IO-1IebiyksTo1PMYT5X53J/view",
-  defa14Jul: "https://drive.google.com/file/d/1PKtGs2v05OqMwyidtyLTe6-2Bdg12loq/view?usp=sharing",
-  casaDielectrica: "https://drive.google.com/file/d/1f9c-aZ18KPgx8eE6PR0wwxaWqKO6Sic5/view?usp=sharing",
-  solucionesElectricas: "https://drive.google.com/file/d/1WT0s-kQ8EYK_H_RtFzNnC1E_AmbrT8tn/view?usp=sharing",
-  devolucionConduleta: "https://drive.google.com/file/d/1jkqv28YnA8j8sZfMZSmMmeYtDFzyZwXq/view?usp=sharing",
-  solarHub: "https://drive.google.com/file/d/1qMfd8ECGO22618ysa6eICzEoWR2MQT2d/view?usp=sharing",
+// PDFs locales servidos desde /pdfs (symlink a ../compras/PDF).
+const INVOICE_PDF_FILES = {
+  defa: "DEFA.pdf",
+  defa14Jul: "Compra DEFA 14 de Julio.pdf",
+  casaDielectrica: "Casa dielectrica.pdf",
+  solucionesElectricas: "Solucione ele\u0301ctricas.pdf",
+  devolucionConduleta: "Devolucio\u0301n conduleta.pdf",
+  solarHub: "CTSHCAR260235_250626_TABARES MILLAN LUIS.pdf",
+  ineldec: "C-1-10482 LG LUIS CARLOS TABARES MILLAN.pdf",
+  casaElectrica277774: "Factura_Casa_Electrica.pdf",
+  casaElectrica277678: "Factura_Casa_Electrica_277678.pdf",
+  todoTornillo: "Factura_convertida.pdf",
 };
+
+function localPdfHref(fileName) {
+  if (!fileName) return "";
+  return `/pdfs/${encodeURIComponent(fileName).replace(/%2F/gi, "/")}`;
+}
+
+// Alias historico: antes apuntaban a Google Drive.
+const INVOICE_DRIVE_LINKS = {
+  defa: localPdfHref(INVOICE_PDF_FILES.defa),
+  defa14Jul: localPdfHref(INVOICE_PDF_FILES.defa14Jul),
+  casaDielectrica: localPdfHref(INVOICE_PDF_FILES.casaDielectrica),
+  solucionesElectricas: localPdfHref(INVOICE_PDF_FILES.solucionesElectricas),
+  devolucionConduleta: localPdfHref(INVOICE_PDF_FILES.devolucionConduleta),
+  solarHub: localPdfHref(INVOICE_PDF_FILES.solarHub),
+  ineldec: localPdfHref(INVOICE_PDF_FILES.ineldec),
+  casaElectrica277774: localPdfHref(INVOICE_PDF_FILES.casaElectrica277774),
+  casaElectrica277678: localPdfHref(INVOICE_PDF_FILES.casaElectrica277678),
+  todoTornillo: localPdfHref(INVOICE_PDF_FILES.todoTornillo),
+};
+
+// Totales oficiales del PDF (Total a pagar, con IVA cuando aplica).
+const INVOICE_OFFICIAL_TOTALS = {
+  "CTSHCAR260235": 39002846,
+  "PAEA15795": 2954424.77,
+  "PAEA15807": 4000,
+  "N3598": 400000,
+  "FEA5-32889": 75000,
+  "PAEA15948": 2934370.62,
+  "C-1-10482": 3933000,
+  "FE1-277774": 5200,
+  "FE1-277678": 200400,
+  "FETT-00289611": 22525,
+};
+
+function normalizeInvoiceNumber(number) {
+  return String(number || "").trim().toUpperCase();
+}
+
+function getOfficialInvoiceTotal(number, fallback = null) {
+  const key = normalizeInvoiceNumber(number);
+  if (Object.prototype.hasOwnProperty.call(INVOICE_OFFICIAL_TOTALS, key)) {
+    return INVOICE_OFFICIAL_TOTALS[key];
+  }
+  // Match parcial (por si hay sufijos).
+  for (const [code, total] of Object.entries(INVOICE_OFFICIAL_TOTALS)) {
+    if (key.includes(code)) return total;
+  }
+  return fallback;
+}
+
+function getPurchasedByFilterValue() {
+  return el.purchasedByFilter?.value || "ALL";
+}
+
+function getFilteredInvoices() {
+  const buyer = getPurchasedByFilterValue();
+  if (buyer === "ALL") return state.invoices;
+  return state.invoices.filter((inv) => (inv.purchasedBy || inferPurchasedBy(inv)) === buyer);
+}
+
+function getInvoicesPaidTotal(invoices = null) {
+  const source = invoices || getFilteredInvoices();
+  return buildInvoiceGroups(source).reduce((acc, g) => acc + toNumber(g.total), 0);
+}
 
 const state = loadState();
 const ui = {
-  editingInvoiceId: null,
   activeTab: "home",
   activeBudgetPanel: "projected",
   ...loadUiState(),
@@ -71,6 +138,9 @@ const el = {
   searchInput: document.getElementById("searchInput"),
   statusFilter: document.getElementById("statusFilter"),
   sectionFilter: document.getElementById("sectionFilter"),
+  filtersToggleBtn: document.getElementById("filtersToggleBtn"),
+  filtersPanel: document.getElementById("filtersPanel"),
+  filtersSummary: document.getElementById("filtersSummary"),
   panelProjectedBtn: document.getElementById("panelProjectedBtn"),
   panelPurchasesBtn: document.getElementById("panelPurchasesBtn"),
   panelCrossBtn: document.getElementById("panelCrossBtn"),
@@ -94,29 +164,23 @@ const el = {
   crosscheckBody: document.getElementById("crosscheckBody"),
   itemsBody: document.getElementById("itemsBody"),
   addItemBtn: document.getElementById("addItemBtn"),
-  invoiceForm: document.getElementById("invoiceForm"),
-  invoiceProject: document.getElementById("invoiceProject"),
-  invoiceItem: document.getElementById("invoiceItem"),
   invoicesBody: document.getElementById("invoicesBody"),
   clearInvoicesBtn: document.getElementById("clearInvoicesBtn"),
-  saveInvoiceBtn: document.getElementById("saveInvoiceBtn"),
   exportJsonBtn: document.getElementById("exportJsonBtn"),
   importJsonInput: document.getElementById("importJsonInput"),
   resetDataBtn: document.getElementById("resetDataBtn"),
-  exportInvoicesCsvBtn: document.getElementById("exportInvoicesCsvBtn"),
-  invoiceDate: document.getElementById("invoiceDate"),
-  invoiceNumber: document.getElementById("invoiceNumber"),
-  invoiceSupplier: document.getElementById("invoiceSupplier"),
-  invoiceLocation: document.getElementById("invoiceLocation"),
-  invoiceQty: document.getElementById("invoiceQty"),
-  invoiceUnitPrice: document.getElementById("invoiceUnitPrice"),
-  invoiceFileLink: document.getElementById("invoiceFileLink"),
+  purchasedByFilter: document.getElementById("purchasedByFilter"),
   itemDialog: document.getElementById("itemDialog"),
   confirmDialog: document.getElementById("confirmDialog"),
   confirmDialogTitle: document.getElementById("confirmDialogTitle"),
   confirmDialogMessage: document.getElementById("confirmDialogMessage"),
   confirmOkBtn: document.getElementById("confirmOkBtn"),
   invoiceGroupDialog: document.getElementById("invoiceGroupDialog"),
+  pdfViewerDialog: document.getElementById("pdfViewerDialog"),
+  pdfViewerFrame: document.getElementById("pdfViewerFrame"),
+  pdfViewerTitle: document.getElementById("pdfViewerTitle"),
+  pdfViewerOpenTab: document.getElementById("pdfViewerOpenTab"),
+  pdfViewerCloseBtn: document.getElementById("pdfViewerCloseBtn"),
   closeInvoiceDetailBtn: document.getElementById("closeInvoiceDetailBtn"),
   invoiceDetailTitle: document.getElementById("invoiceDetailTitle"),
   invoiceDetailMeta: document.getElementById("invoiceDetailMeta"),
@@ -157,10 +221,7 @@ function askConfirm({
   });
 }
 
-function applyComprasImport(stateObj) {
-  if (typeof COMPRAS_IMPORT === "undefined") return stateObj;
-  if (stateObj._importedComprasVersion === COMPRAS_IMPORT.version) return stateObj;
-
+function upsertComprasCatalog(stateObj) {
   const retireItems = new Set(COMPRAS_IMPORT.retireItemIds || []);
   const supersedeInvoices = new Set(COMPRAS_IMPORT.supersedeInvoiceIds || []);
 
@@ -197,16 +258,17 @@ function applyComprasImport(stateObj) {
     existingIds.add(raw.id);
   }
 
+  // Siempre sincroniza facturas del catalogo al registro (por id).
   const invIds = new Set((stateObj.invoices || []).map((x) => x.id));
   for (const inv of COMPRAS_IMPORT.invoices || []) {
-    if (invIds.has(inv.id)) continue;
     const item = stateObj.items.find((x) => x.id === inv.itemId);
-    stateObj.invoices.push({
+    const payload = {
       id: inv.id,
       date: inv.date,
       number: inv.number,
       supplier: inv.supplier,
       location: inv.location || "",
+      purchasedBy: inv.purchasedBy || inferPurchasedBy(inv),
       fileLink: normalizeInvoiceFileLink(inv.fileLink || inferInvoiceFileLink(inv)),
       qty: toNumber(inv.qty),
       unitPrice: toNumber(inv.unitPrice),
@@ -214,15 +276,29 @@ function applyComprasImport(stateObj) {
       itemId: inv.itemId,
       project: inv.project || item?.project || "",
       itemDescription: inv.itemDescription || item?.descripcion || "",
-    });
-    invIds.add(inv.id);
+    };
+    if (invIds.has(inv.id)) {
+      const idx = stateObj.invoices.findIndex((x) => x.id === inv.id);
+      if (idx >= 0) {
+        stateObj.invoices[idx] = {
+          ...stateObj.invoices[idx],
+          ...payload,
+        };
+      }
+    } else {
+      stateObj.invoices.push(payload);
+      invIds.add(inv.id);
+    }
   }
 
   for (const inv of stateObj.invoices) {
     const item = stateObj.items.find((x) => x.id === inv.itemId);
     if (item && !inv.itemDescription) inv.itemDescription = item.descripcion;
-    // Fuerza links de Google Drive (reemplaza rutas locales antiguas).
     inv.fileLink = normalizeInvoiceFileLink(inferInvoiceFileLink(inv) || inv.fileLink);
+    inv.purchasedBy = inferPurchasedBy(inv);
+    if (item && inv.project && inv.project !== item.project) {
+      inv.project = item.project;
+    }
   }
 
   const lastPrice = {};
@@ -236,6 +312,12 @@ function applyComprasImport(stateObj) {
   stateObj._importedComprasVersion = COMPRAS_IMPORT.version;
   stateObj._comprasNotes = COMPRAS_IMPORT.notes || [];
   return stateObj;
+}
+
+function applyComprasImport(stateObj) {
+  if (typeof COMPRAS_IMPORT === "undefined") return stateObj;
+  // Siempre upsert: garantiza que facturas nuevas queden en Registro de facturas.
+  return upsertComprasCatalog(stateObj);
 }
 
 function loadState() {
@@ -304,6 +386,7 @@ function normalizeState(raw) {
       ? raw.invoices.map((inv) => ({
         ...inv,
         location: inv.location || "",
+        purchasedBy: inv.purchasedBy || inferPurchasedBy(inv),
         fileLink: normalizeInvoiceFileLink(inv.fileLink || inferInvoiceFileLink(inv)),
       }))
       : [],
@@ -458,6 +541,33 @@ function escapeHtml(v) {
     .replaceAll("'", "&#039;");
 }
 
+function inferPurchasedBy(inv) {
+  const supplier = (inv?.supplier || "").trim().toLowerCase();
+  const number = (inv?.number || "").trim().toLowerCase();
+  if (supplier.includes("soluciones electricas") || number.includes("n3598")) {
+    return "Gustavo A.";
+  }
+  if (supplier.includes("casa dielectrica") || number.includes("fea5-32889")) {
+    return "Gustavo A.";
+  }
+  if (
+    supplier.includes("casa electrica") ||
+    number.includes("277774") ||
+    number.includes("277678")
+  ) {
+    return "Gustavo A.";
+  }
+  if (
+    supplier.includes("todo tornillo") ||
+    supplier.includes("ramirez y david") ||
+    number.includes("fett") ||
+    number.includes("289611")
+  ) {
+    return "Gustavo A.";
+  }
+  return "Dr Tabares";
+}
+
 function inferInvoiceFileLink(inv) {
   const supplier = (inv?.supplier || "").trim().toLowerCase();
   const number = (inv?.number || "").trim().toLowerCase();
@@ -490,6 +600,30 @@ function inferInvoiceFileLink(inv) {
   if (supplier.includes("casa dielectrica") || number.includes("fea5-32889")) {
     return INVOICE_DRIVE_LINKS.casaDielectrica;
   }
+  if (number.includes("277774") || linkHint.includes("factura_casa_electrica.pdf")) {
+    return INVOICE_DRIVE_LINKS.casaElectrica277774;
+  }
+  if (number.includes("277678") || linkHint.includes("factura_casa_electrica_277678")) {
+    return INVOICE_DRIVE_LINKS.casaElectrica277678;
+  }
+  if (
+    supplier.includes("todo tornillo") ||
+    supplier.includes("ramirez y david") ||
+    number.includes("fett") ||
+    number.includes("289611") ||
+    linkHint.includes("factura_convertida")
+  ) {
+    return INVOICE_DRIVE_LINKS.todoTornillo;
+  }
+  if (
+    number.includes("c-1-10482") ||
+    number.includes("10482") ||
+    supplier.includes("ineldec") ||
+    linkHint.includes("c-1-10482") ||
+    linkHint.includes("ineldec")
+  ) {
+    return INVOICE_DRIVE_LINKS.ineldec;
+  }
   if (
     supplier.includes("solar hub") ||
     number.includes("ctshcar260235") ||
@@ -506,6 +640,16 @@ function normalizeInvoiceFileLink(link) {
   if (!value) return "";
   const lower = value.toLowerCase();
   if (lower.startsWith("javascript:") || lower.startsWith("data:")) return "";
+  if (lower.includes("/pdfs/") || lower.includes("compras/pdf/")) {
+    if (lower.includes("c-1-10482") || lower.includes("ineldec")) return INVOICE_DRIVE_LINKS.ineldec;
+    if (lower.includes("compra defa 14") || lower.includes("compra%20defa%2014")) return INVOICE_DRIVE_LINKS.defa14Jul;
+    if (lower.includes("devoluci") || lower.includes("conduleta")) return INVOICE_DRIVE_LINKS.devolucionConduleta;
+    if (lower.includes("casa dielectrica") || lower.includes("casa%20dielectrica")) return INVOICE_DRIVE_LINKS.casaDielectrica;
+    if (lower.includes("solucione")) return INVOICE_DRIVE_LINKS.solucionesElectricas;
+    if (lower.includes("ctshcar") || lower.includes("solar")) return INVOICE_DRIVE_LINKS.solarHub;
+    if (lower.includes("defa.pdf") || lower.endsWith("/defa.pdf") || lower.includes("defa.pdf")) return INVOICE_DRIVE_LINKS.defa;
+    return value.startsWith("/") ? value : localPdfHref(value.split("/").pop());
+  }
   if (lower.includes("1pktgs2v05oqmwyidtylte6-2bdg12loq") || lower.includes("compra defa 14")) {
     return INVOICE_DRIVE_LINKS.defa14Jul;
   }
@@ -515,11 +659,14 @@ function normalizeInvoiceFileLink(link) {
   if (lower.includes("1c90c9oos0io-1iebiykstto1pmyt5x53j")) {
     return INVOICE_DRIVE_LINKS.defa;
   }
+  if (lower.includes("c-1-10482") || lower.includes("ineldec")) {
+    return INVOICE_DRIVE_LINKS.ineldec;
+  }
   if (lower.includes("drive.google.com/file/d/")) return value;
   if (lower.includes("defa") && !lower.includes("devoluci")) return INVOICE_DRIVE_LINKS.defa;
   if (lower.includes("solucione") || lower.includes("soluciones")) return INVOICE_DRIVE_LINKS.solucionesElectricas;
   if (lower.includes("casa dielectrica") || lower.includes("dielectrica")) return INVOICE_DRIVE_LINKS.casaDielectrica;
-  if (lower.includes("ctshcar") || lower.includes("solar hub") || lower.includes("tabares")) {
+  if (lower.includes("ctshcar") || lower.includes("solar hub") || (lower.includes("tabares") && lower.includes("ctshcar"))) {
     return INVOICE_DRIVE_LINKS.solarHub;
   }
   return value;
@@ -529,6 +676,8 @@ function getInvoiceFileHref(link) {
   const normalized = normalizeInvoiceFileLink(link);
   if (!normalized) return "";
   if (/^(https?:\/\/|file:\/\/)/i.test(normalized)) return normalized;
+  // Rutas locales /pdfs/... ya vienen encodeadas por localPdfHref.
+  if (normalized.startsWith("/pdfs/")) return normalized;
   if (normalized.startsWith("/") || normalized.startsWith("./") || normalized.startsWith("../")) {
     return encodeURI(normalized);
   }
@@ -538,16 +687,48 @@ function getInvoiceFileHref(link) {
 function getFileLabel(link) {
   const href = getInvoiceFileHref(link);
   if (!href) return "";
-  if (href.includes("1PKtGs2v05OqMwyidtyLTe6-2Bdg12loq")) return "Compra DEFA 14 de Julio.pdf (Google Drive)";
-  if (href.includes("1C90C9ooS0IO-1IebiyksTo1PMYT5X53J")) return "DEFA.pdf (Google Drive)";
-  if (href.includes("1f9c-aZ18KPgx8eE6PR0wwxaWqKO6Sic5")) return "Casa dielectrica.pdf (Google Drive)";
-  if (href.includes("1WT0s-kQ8EYK_H_RtFzNnC1E_AmbrT8tn")) return "Soluciones electricas.pdf (Google Drive)";
-  if (href.includes("1jkqv28YnA8j8sZfMZSmMmeYtDFzyZwXq")) return "Devolucion conduleta.pdf (Google Drive)";
-  if (href.includes("1qMfd8ECGO22618ysa6eICzEoWR2MQT2d")) return "Solar Hub CTSHCAR260235.pdf (Google Drive)";
+  const lower = href.toLowerCase();
+  if (lower.includes("compra%20defa%2014") || lower.includes("compra defa 14")) return "Compra DEFA 14 de Julio.pdf";
+  if (lower.includes("defa.pdf") && !lower.includes("14")) return "DEFA.pdf";
+  if (lower.includes("casa%20dielectrica") || lower.includes("casa dielectrica")) return "Casa dielectrica.pdf";
+  if (lower.includes("solucione")) return "Soluciones electricas.pdf";
+  if (lower.includes("devoluci") || lower.includes("conduleta")) return "Devolucion conduleta.pdf";
+  if (lower.includes("ctshcar") || lower.includes("solar")) return "Solar Hub CTSHCAR260235.pdf";
+  if (lower.includes("c-1-10482") || lower.includes("ineldec")) return "C-1-10482 INELDEC.pdf";
+  if (lower.includes("factura_casa_electrica_277678")) return "Factura_Casa_Electrica_277678.pdf";
+  if (lower.includes("factura_casa_electrica")) return "Factura_Casa_Electrica.pdf";
+  if (lower.includes("factura_convertida")) return "Factura_convertida.pdf";
   if (/drive\.google\.com/i.test(href)) return "Abrir en Google Drive";
   const clean = href.split("?")[0].split("#")[0];
   const parts = clean.split("/");
-  return decodeURIComponent(parts[parts.length - 1] || href);
+  try {
+    return decodeURIComponent(parts[parts.length - 1] || href);
+  } catch (_e) {
+    return parts[parts.length - 1] || href;
+  }
+}
+
+function openPdfViewer(href, title = "Vista PDF") {
+  if (!href) {
+    window.alert("Esta factura no tiene PDF disponible.");
+    return;
+  }
+  if (!el.pdfViewerDialog || !el.pdfViewerFrame) {
+    window.open(href, "_blank", "noopener,noreferrer");
+    return;
+  }
+  if (el.pdfViewerTitle) el.pdfViewerTitle.textContent = title || "Vista PDF";
+  if (el.pdfViewerOpenTab) {
+    el.pdfViewerOpenTab.href = href;
+    el.pdfViewerOpenTab.style.display = "";
+  }
+  el.pdfViewerFrame.src = href;
+  el.pdfViewerDialog.showModal();
+}
+
+function closePdfViewer() {
+  if (el.pdfViewerFrame) el.pdfViewerFrame.src = "";
+  el.pdfViewerDialog?.close();
 }
 
 function badge(project) {
@@ -585,10 +766,18 @@ function statusChip(status) {
   return `<span class="status-chip ${status.toLowerCase()}"><span class="full">${current.full}</span><span class="short">${current.short}</span></span>`;
 }
 
+function getItemInvoiceSpend(itemId) {
+  return state.invoices
+    .filter((inv) => inv.itemId === itemId)
+    .reduce((acc, inv) => acc + toNumber(inv.total), 0);
+}
+
 function getTotals(item) {
   const estimado = toNumber(item.cantidadProyectada) * toNumber(item.precioPromedioInternet);
   const unitReal = toNumber(item.precioReal) || toNumber(item.precioPromedioInternet);
-  const real = toNumber(item.cantidadComprada) * unitReal;
+  const manualSpend = toNumber(item.cantidadCompradaManual) * unitReal;
+  // Gasto real = suma de renglones facturados + compra manual.
+  const real = getItemInvoiceSpend(item.id) + manualSpend;
   return { estimado, real };
 }
 
@@ -723,18 +912,28 @@ function getDataConsistencyReport() {
   // (mismo proveedor + fecha, pero con diferente numero de factura/comprobante).
   const repeatedSupplierDay = Object.values(bySupplierDay).filter((set) => set.size > 1).length;
 
+  // Varios renglones con el mismo numero = una sola factura (OK).
+  // Solo es inconsistente si el mismo numero aparece con otro proveedor o fecha.
   const duplicatedInvoiceNumber = (() => {
     const map = {};
     for (const inv of state.invoices) {
       const n = (inv.number || "").trim().toLowerCase();
       if (!n) continue;
-      map[n] = (map[n] || 0) + 1;
+      if (!map[n]) map[n] = { suppliers: new Set(), dates: new Set() };
+      map[n].suppliers.add((inv.supplier || "").trim().toLowerCase());
+      map[n].dates.add(inv.date || "");
     }
-    return Object.values(map).filter((n) => n > 1).length;
+    return Object.values(map).filter((meta) => meta.suppliers.size > 1 || meta.dates.size > 1).length;
   })();
 
   const itemsWithoutSection = state.items.filter((item) => !SECCIONES_OPERATIVAS.includes(item.seccionOperativa)).length;
   const invoicesWithoutLocation = state.invoices.filter((inv) => !(inv.location || "").trim()).length;
+  const issueCount =
+    orphanInvoices +
+    projectMismatches +
+    duplicatedInvoiceNumber +
+    itemsWithoutSection +
+    invoicesWithoutLocation;
 
   return {
     totalItems: state.items.length,
@@ -745,6 +944,7 @@ function getDataConsistencyReport() {
     duplicatedInvoiceNumber,
     itemsWithoutSection,
     invoicesWithoutLocation,
+    issueCount,
   };
 }
 
@@ -929,14 +1129,27 @@ function renderHomeSummary() {
 
 function renderConsistencySummary() {
   if (!el.consistencySummary) return;
+  const filteredInvoices = getFilteredInvoices();
   const c = getDataConsistencyReport();
-  const totalCompradoFacturas = state.invoices.reduce((acc, inv) => acc + toNumber(inv.total), 0);
+  const totalCompradoFacturas = getInvoicesPaidTotal(filteredInvoices);
+  const groupedCount = buildInvoiceGroups(filteredInvoices).length;
+  const buyer = getPurchasedByFilterValue();
+  const buyerLabel = buyer === "ALL" ? "Todos" : buyer;
+  const statusClass = c.issueCount > 0 ? "kpi-warn" : "kpi-ok";
+  const statusLabel = c.issueCount > 0 ? "Inconsistencias" : "Estado datos";
+  const statusValue = c.issueCount > 0 ? String(c.issueCount) : "OK";
+  const gustavoTotal = getInvoicesPaidTotal(
+    state.invoices.filter((inv) => (inv.purchasedBy || inferPurchasedBy(inv)) === "Gustavo A.")
+  );
+  const tabaresTotal = getInvoicesPaidTotal(
+    state.invoices.filter((inv) => (inv.purchasedBy || inferPurchasedBy(inv)) === "Dr Tabares")
+  );
   el.consistencySummary.innerHTML = `
-    <article class="kpi kpi-highlight"><div class="label">Total comprado (facturas)</div><div class="value">${formatCurrency(totalCompradoFacturas)}</div></article>
-    <article class="kpi"><div class="label">Facturas</div><div class="value">${c.totalInvoices}</div></article>
-    <article class="kpi"><div class="label">Items</div><div class="value">${c.totalItems}</div></article>
-    <article class="kpi"><div class="label">Repetidas proveedor-dia</div><div class="value">${c.repeatedSupplierDay}</div></article>
-    <article class="kpi"><div class="label">Inconsistencias</div><div class="value">${c.orphanInvoices + c.projectMismatches + c.duplicatedInvoiceNumber + c.itemsWithoutSection + c.invoicesWithoutLocation}</div></article>
+    <article class="kpi kpi-highlight"><div class="label">Total comprado (${escapeHtml(buyerLabel)})</div><div class="value">${formatCurrency(totalCompradoFacturas)}</div></article>
+    <article class="kpi"><div class="label">Facturas</div><div class="value">${groupedCount}</div></article>
+    <article class="kpi"><div class="label">Dr Tabares</div><div class="value">${formatCurrency(tabaresTotal)}</div></article>
+    <article class="kpi"><div class="label">Gustavo A.</div><div class="value">${formatCurrency(gustavoTotal)}</div></article>
+    <article class="kpi ${statusClass}"><div class="label">${statusLabel}</div><div class="value">${statusValue}</div></article>
   `;
 }
 
@@ -1125,14 +1338,6 @@ function renderItemsTable() {
   }
 }
 
-function renderInvoiceItemOptions() {
-  el.invoiceItem.innerHTML = state.items
-    .filter((x) => x.project === el.invoiceProject.value)
-    .sort((a, b) => a.descripcion.localeCompare(b.descripcion))
-    .map((i) => `<option value="${i.id}">${escapeHtml(i.descripcion).slice(0, 95)}</option>`)
-    .join("");
-}
-
 function buildInvoiceGroups(invoices) {
   const groups = {};
   for (const raw of invoices) {
@@ -1161,6 +1366,7 @@ function buildInvoiceGroups(invoices) {
     }
     // Siempre preferir link de Drive actualizado.
     inv.fileLink = normalizeInvoiceFileLink(inv.fileLink || inferInvoiceFileLink(inv));
+    inv.purchasedBy = inv.purchasedBy || inferPurchasedBy(inv);
     const key = `${inv.date || ""}__${supplier}__${(inv.number || "").trim().toLowerCase()}`;
     if (!groups[key]) {
       groups[key] = {
@@ -1169,12 +1375,14 @@ function buildInvoiceGroups(invoices) {
         number: inv.number || "",
         supplier: inv.supplier || "",
         location: inv.location || "",
+        purchasedBy: inv.purchasedBy || "",
         project: inv.project || "",
         ids: [],
         qty: 0,
         total: 0,
         itemDescriptions: new Set(),
         fileLinks: new Set(),
+        purchasers: new Set(),
       };
     }
     const g = groups[key];
@@ -1182,25 +1390,40 @@ function buildInvoiceGroups(invoices) {
     g.qty += toNumber(inv.qty);
     g.total += toNumber(inv.total);
     g.itemDescriptions.add(inv.itemDescription || "");
+    if (inv.purchasedBy) g.purchasers.add(inv.purchasedBy);
     if (inv.fileLink) g.fileLinks.add(inv.fileLink);
     if (!g.project && inv.project) g.project = inv.project;
     if (!g.location && inv.location) g.location = inv.location;
+    if (!g.purchasedBy && inv.purchasedBy) g.purchasedBy = inv.purchasedBy;
   }
   return Object.values(groups)
-    .map((g) => ({
-      ...g,
-      unitPrice: g.qty > 0 ? g.total / g.qty : 0,
-      itemSummary:
-        g.itemDescriptions.size <= 1
-          ? [...g.itemDescriptions][0] || "-"
-          : `${g.itemDescriptions.size} items en una factura`,
-      hasFileLink: g.fileLinks.size > 0,
-    }))
+    .map((g) => {
+      const linesTotal = g.total;
+      const official = getOfficialInvoiceTotal(g.number, null);
+      const total = official == null ? linesTotal : official;
+      const purchaserList = [...g.purchasers];
+      return {
+        ...g,
+        linesTotal,
+        total,
+        unitPrice: g.qty > 0 ? total / g.qty : 0,
+        purchasedBy:
+          purchaserList.length <= 1
+            ? purchaserList[0] || g.purchasedBy || "Dr Tabares"
+            : purchaserList.join(" / "),
+        itemSummary:
+          g.itemDescriptions.size <= 1
+            ? [...g.itemDescriptions][0] || "-"
+            : `${g.itemDescriptions.size} items en una factura`,
+        hasFileLink: g.fileLinks.size > 0,
+        totalFromPdf: official != null,
+      };
+    })
     .sort((a, b) => (a.date < b.date ? 1 : -1));
 }
 
 function renderInvoicesTable() {
-  const grouped = buildInvoiceGroups(state.invoices);
+  const grouped = buildInvoiceGroups(getFilteredInvoices());
   el.invoicesBody.innerHTML = grouped
     .map((inv) => `
       <tr>
@@ -1208,19 +1431,12 @@ function renderInvoicesTable() {
         <td data-label="Factura">${escapeHtml(inv.number)}</td>
         <td data-label="Proveedor">${escapeHtml(inv.supplier)}</td>
         <td data-label="Lugar">${escapeHtml(inv.location || "-")}</td>
-        <td data-label="Proyecto">${badge(inv.project)}</td>
-        <td data-label="Item"><small>${escapeHtml(inv.itemSummary || "")}</small></td>
+        <td data-label="Comprado por">${escapeHtml(inv.purchasedBy || "Dr Tabares")}</td>
         <td data-label="Cant.">${toNumber(inv.qty).toFixed(2)}</td>
-        <td data-label="P.U.">${formatCurrency(inv.unitPrice)}</td>
         <td data-label="Total">${formatCurrency(inv.total)}</td>
         <td data-label="Acciones">
           <button type="button" class="ghost icon-btn" data-view-invoice-group="${escapeHtml(inv.ids.join(","))}" title="Ver detalle">🔎 <span>Ver</span></button>
-          ${
-            inv.ids.length === 1
-              ? `<button type="button" class="ghost icon-btn" data-edit-invoice-id="${inv.ids[0]}" title="Editar">✏️ <span>Editar</span></button>`
-              : `<button type="button" class="ghost icon-btn" disabled title="Factura agrupada">📦 <span>Grupo</span></button>`
-          }
-          ${inv.hasFileLink ? `<button type="button" class="ghost icon-btn" data-open-invoice-group-link="${escapeHtml(inv.ids.join(","))}" title="Abrir PDF en Google Drive">📄 <span>PDF</span></button>` : ""}
+          ${inv.hasFileLink ? `<button type="button" class="ghost icon-btn" data-open-invoice-group-link="${escapeHtml(inv.ids.join(","))}" title="Ver PDF">📄 <span>PDF</span></button>` : ""}
           <button type="button" class="danger ghost icon-btn" data-delete-invoice-group="${escapeHtml(inv.ids.join(","))}" title="Eliminar">🗑 <span>Del</span></button>
         </td>
       </tr>`)
@@ -1245,7 +1461,12 @@ function openInvoiceGroupDetail(idsCsv) {
     el.invoiceDetailTitle.textContent = `Detalle factura ${base.number || ""}`.trim();
   }
   if (el.invoiceDetailMeta) {
-    el.invoiceDetailMeta.innerHTML = `${escapeHtml(base.date || "-")} · ${escapeHtml(base.supplier || "-")} · ${lines.length} renglones · Cantidad total ${qty.toFixed(2)} · Total ${formatCurrency(total)}`;
+    const official = getOfficialInvoiceTotal(base.number, null);
+    const totalLabel = official == null
+      ? `Total renglones ${formatCurrency(total)}`
+      : `Total PDF ${formatCurrency(official)} · Renglones ${formatCurrency(total)}`;
+    const buyers = [...new Set(lines.map((x) => x.purchasedBy || inferPurchasedBy(x)))].join(" / ");
+    el.invoiceDetailMeta.innerHTML = `${escapeHtml(base.date || "-")} · ${escapeHtml(base.supplier || "-")} · Comprado por ${escapeHtml(buyers || "Dr Tabares")} · ${lines.length} renglones · Cantidad ${qty.toFixed(2)} · ${totalLabel}`;
   }
   const linkMap = new Map();
   for (const line of lines) {
@@ -1260,7 +1481,7 @@ function openInvoiceGroupDetail(idsCsv) {
       el.invoiceDetailLinks.innerHTML = '<div class="mini-note">Archivo digital: no registrado.</div>';
     } else {
       el.invoiceDetailLinks.innerHTML = [...linkMap.entries()]
-        .map(([href, label]) => `<a class="file-link-chip" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">📄 ${escapeHtml(label || "Abrir archivo digital")}</a>`)
+        .map(([href, label]) => `<button type="button" class="file-link-chip" data-open-pdf-href="${escapeHtml(href)}" data-open-pdf-title="${escapeHtml(label || "Vista PDF")}">📄 ${escapeHtml(label || "Ver PDF")}</button>`)
         .join("");
     }
   }
@@ -1385,13 +1606,19 @@ function renderCharts() {
   drawBarChart(el.projectChart, projects, projected, purchased);
 
   const grouped = {};
-  for (const inv of state.invoices) {
-    const month = (inv.date || "").slice(0, 7);
+  for (const g of buildInvoiceGroups(state.invoices)) {
+    const month = (g.date || "").slice(0, 7);
     if (!month) continue;
-    grouped[month] = (grouped[month] || 0) + toNumber(inv.total);
+    // Usa total oficial PDF (si existe) para alinear con registro de facturas.
+    grouped[month] = (grouped[month] || 0) + toNumber(g.total);
   }
   const months = Object.keys(grouped).sort();
   drawLineChart(el.trendChart, months.map((m) => m.slice(5)), months.map((m) => grouped[m]));
+}
+
+function syncShellState() {
+  document.body.dataset.tab = ui.activeTab || "home";
+  document.body.dataset.panel = ui.activeBudgetPanel || "projected";
 }
 
 function setTab(target) {
@@ -1405,6 +1632,7 @@ function setTab(target) {
   el.viewHome?.classList.toggle("active", isHome);
   el.viewBudget.classList.toggle("active", isBudget);
   el.viewAnalytics.classList.toggle("active", isAnalytics);
+  syncShellState();
   if (isAnalytics) { syncCanvasDpi(); renderCharts(); }
   saveUiState();
 }
@@ -1428,6 +1656,7 @@ function setBudgetPanel(target, options = {}) {
   el.panelPurchases?.classList.toggle("active", purchases);
   el.panelCross?.classList.toggle("active", cross);
   el.panelInvoices?.classList.toggle("active", invoices);
+  syncShellState();
   renderBudgetSummary();
   saveUiState();
 }
@@ -1465,48 +1694,47 @@ function saveItemDialog() {
   rerender();
 }
 
+
+function updateFiltersSummary() {
+  if (!el.filtersSummary) return;
+  const project = el.projectFilter?.value || "ALL";
+  const status = el.statusFilter?.value || "ALL";
+  const search = (el.searchInput?.value || "").trim();
+  const sections = getSelectedSections();
+  const projectLabel = project === "ALL" ? "Todo unificado" : project;
+  const statusLabel =
+    status === "ALL" ? null :
+    status === "PENDIENTE" ? "Falta comprar" :
+    status === "COMPLETO" ? "Completo" :
+    status === "EXCESO" ? "Sobrecomprado" : status;
+  const sectionLabel =
+    sections.length === 0 || sections.length === SECCIONES_OPERATIVAS.length
+      ? "Todas las secciones"
+      : sections.map((s) => (s === "Conexion acometida principal" ? "Acometida" : s)).join(" + ");
+  const parts = [projectLabel, sectionLabel];
+  if (statusLabel) parts.push(statusLabel);
+  if (search) parts.push(`Busqueda: "${search}"`);
+  el.filtersSummary.textContent = parts.join(" · ");
+  if (el.filtersToggleBtn) {
+    const active = project !== "ALL" || status !== "ALL" || !!search || sections.length !== SECCIONES_OPERATIVAS.length;
+    el.filtersToggleBtn.classList.toggle("filters-active", active);
+  }
+}
+
 function rerender() {
   recalcCompradas();
+  updateFiltersSummary();
   renderHomeSummary();
   renderBudgetSummary();
   renderConsistencySummary();
   renderKpis();
   renderAiuTable();
   renderItemsTable();
-  renderInvoiceItemOptions();
   renderInvoicesTable();
   renderPendingTable();
   renderSectionBars();
   if (el.viewAnalytics.classList.contains("active")) { syncCanvasDpi(); renderCharts(); }
   saveState();
-}
-
-function resetInvoiceForm() {
-  ui.editingInvoiceId = null;
-  el.saveInvoiceBtn.textContent = "Registrar factura";
-  el.invoiceForm.reset();
-  el.invoiceProject.value = "8kW";
-  renderInvoiceItemOptions();
-}
-
-function collectInvoiceFormData() {
-  const item = state.items.find((x) => x.id === el.invoiceItem.value);
-  const payload = {
-    id: ui.editingInvoiceId || crypto.randomUUID(),
-    date: el.invoiceDate.value,
-    number: el.invoiceNumber.value.trim(),
-    supplier: el.invoiceSupplier.value.trim(),
-    location: el.invoiceLocation.value.trim(),
-    fileLink: normalizeInvoiceFileLink(el.invoiceFileLink?.value || ""),
-    qty: toNumber(el.invoiceQty.value),
-    unitPrice: toNumber(el.invoiceUnitPrice.value),
-    itemId: el.invoiceItem.value,
-    project: item?.project || "",
-    itemDescription: item?.descripcion || "",
-  };
-  payload.total = payload.qty * payload.unitPrice;
-  if (!item || !payload.date || !payload.number || !payload.supplier || !payload.location || payload.qty <= 0) return null;
-  return payload;
 }
 
 function exportJsonBackup() {
@@ -1516,21 +1744,6 @@ function exportJsonBackup() {
   const a = document.createElement("a");
   a.href = url;
   a.download = `tabarec-backup-${new Date().toISOString().slice(0, 10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function exportInvoicesCsv() {
-  const rows = [["fecha","factura","proveedor","donde_se_compro","archivo_digital","proyecto","descripcion","cantidad","precioUnitario","total"]];
-  for (const inv of state.invoices) {
-    rows.push([inv.date, inv.number, inv.supplier, inv.location || "", inv.fileLink || "", inv.project, inv.itemDescription, inv.qty, inv.unitPrice, inv.total]);
-  }
-  const csv = rows.map((line) => line.map((v) => `"${String(v).replaceAll('"', '""')}"`).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `tabarec-facturas-${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -1564,7 +1777,24 @@ function setupEvents() {
     rerender();
   });
 
-  for (const c of [el.projectFilter, el.searchInput, el.statusFilter]) {
+  el.filtersToggleBtn?.addEventListener("click", () => {
+    if (!el.filtersPanel) return;
+    const open = el.filtersPanel.hasAttribute("hidden");
+    if (open) el.filtersPanel.removeAttribute("hidden");
+    else el.filtersPanel.setAttribute("hidden", "");
+    el.filtersToggleBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!el.filtersPanel || el.filtersPanel.hasAttribute("hidden")) return;
+    const inside = event.target.closest(".filters-card");
+    if (inside) return;
+    el.filtersPanel.setAttribute("hidden", "");
+    el.filtersToggleBtn?.setAttribute("aria-expanded", "false");
+  });
+
+  for (const c of [el.projectFilter, el.searchInput, el.statusFilter, el.purchasedByFilter]) {
+    if (!c) continue;
     c.addEventListener("input", rerender);
     c.addEventListener("change", rerender);
   }
@@ -1635,22 +1865,6 @@ function setupEvents() {
     rerender();
   });
 
-  el.invoiceProject.addEventListener("change", renderInvoiceItemOptions);
-
-  el.invoiceForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const payload = collectInvoiceFormData();
-    if (!payload) return;
-    if (ui.editingInvoiceId) {
-      const idx = state.invoices.findIndex((x) => x.id === ui.editingInvoiceId);
-      if (idx >= 0) state.invoices[idx] = payload;
-    } else {
-      state.invoices.push(payload);
-    }
-    resetInvoiceForm();
-    rerender();
-  });
-
   el.invoicesBody.addEventListener("click", async (event) => {
     const view = event.target.closest("[data-view-invoice-group]");
     if (view) {
@@ -1665,35 +1879,9 @@ function setupEvents() {
         .filter(Boolean);
       const set = new Set(ids);
       const lines = state.invoices.filter((x) => set.has(x.id));
-      // Preferir link Drive; si hay varios (DEFA + devolucion), abrir el de la factura del grupo.
       const withLink = lines.find((x) => getInvoiceFileHref(x.fileLink || inferInvoiceFileLink(x)));
       const href = getInvoiceFileHref(withLink?.fileLink || inferInvoiceFileLink(withLink) || "");
-      if (!href) {
-        window.alert("Esta factura no tiene PDF en Google Drive.");
-        return;
-      }
-      const opened = window.open(href, "_blank", "noopener,noreferrer");
-      if (!opened) {
-        window.alert("El navegador bloqueo la ventana. Permite popups o abre el link desde Ver.");
-      }
-      return;
-    }
-    const edit = event.target.closest("[data-edit-invoice-id]");
-    if (edit) {
-      const inv = state.invoices.find((x) => x.id === edit.getAttribute("data-edit-invoice-id"));
-      if (!inv) return;
-      ui.editingInvoiceId = inv.id;
-      el.saveInvoiceBtn.textContent = "Guardar cambios";
-      el.invoiceDate.value = inv.date;
-      el.invoiceNumber.value = inv.number;
-      el.invoiceSupplier.value = inv.supplier;
-      el.invoiceLocation.value = inv.location || "";
-      el.invoiceProject.value = inv.project;
-      renderInvoiceItemOptions();
-      el.invoiceItem.value = inv.itemId;
-      el.invoiceQty.value = inv.qty;
-      el.invoiceUnitPrice.value = inv.unitPrice;
-      if (el.invoiceFileLink) el.invoiceFileLink.value = inv.fileLink || "";
+      openPdfViewer(href, getFileLabel(withLink?.fileLink || inferInvoiceFileLink(withLink) || href));
       return;
     }
     const delGroup = event.target.closest("[data-delete-invoice-group]");
@@ -1721,12 +1909,10 @@ function setupEvents() {
     });
     if (!ok) return;
     state.invoices = [];
-    resetInvoiceForm();
     rerender();
   });
 
   el.exportJsonBtn.addEventListener("click", exportJsonBackup);
-  el.exportInvoicesCsvBtn.addEventListener("click", exportInvoicesCsv);
 
   el.importJsonInput.addEventListener("change", async (event) => {
     const file = event.target.files?.[0];
@@ -1737,7 +1923,6 @@ function setupEvents() {
       state.items = imported.items;
       state.aiu = imported.aiu;
       state.invoices = imported.invoices;
-      resetInvoiceForm();
       rerender();
       window.alert("Respaldo importado correctamente.");
     } catch (_error) {
@@ -1760,12 +1945,20 @@ function setupEvents() {
     state.invoices = defaults.invoices;
     state._importedComprasVersion = defaults._importedComprasVersion;
     state._comprasNotes = defaults._comprasNotes;
-    resetInvoiceForm();
     rerender();
   });
 
   el.closeItemDialogBtn.addEventListener("click", () => el.itemDialog.close());
   el.closeInvoiceDetailBtn?.addEventListener("click", () => el.invoiceGroupDialog?.close());
+  el.pdfViewerCloseBtn?.addEventListener("click", closePdfViewer);
+  el.pdfViewerDialog?.addEventListener("close", () => {
+    if (el.pdfViewerFrame) el.pdfViewerFrame.src = "";
+  });
+  el.invoiceDetailLinks?.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-open-pdf-href]");
+    if (!btn) return;
+    openPdfViewer(btn.getAttribute("data-open-pdf-href"), btn.getAttribute("data-open-pdf-title") || "Vista PDF");
+  });
   el.saveItemDetailBtn.addEventListener("click", saveItemDialog);
 
   window.addEventListener("resize", () => {
@@ -1780,7 +1973,6 @@ setupEvents();
 initTheme();
 setTab(ui.activeTab);
 setBudgetPanel(ui.activeBudgetPanel, { ensureBudgetView: false });
-resetInvoiceForm();
 rerender();
 
 function initTheme() {
